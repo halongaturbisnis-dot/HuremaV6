@@ -271,7 +271,7 @@ export const accountService = {
       const headers = [
         'Nama Lengkap (*)', 'NIK KTP (*)', 'Gender (*)', 'Agama (*)', 'Tgl Lahir (YYYY-MM-DD) (*)', 
         'Alamat (*)', 'No Telepon (*)', 'Email (*)', 'Status Nikah (*)', 'Tanggungan', 
-        'NIK Internal (*)', 'Jabatan (*)', 'Departemen/Divisi (*)', 'Lokasi Penempatan (*)', 
+        'NIK Internal (*)', 'Jabatan (*)', 'Departemen (*)', 'Lokasi Penempatan (*)', 
         'Nomor Kontrak (*)', 'Jenis Kontrak (*)', 'Mulai Kontrak (YYYY-MM-DD) (*)', 'Akhir Kontrak (YYYY-MM-DD)',
         'Pendidikan Terakhir (*)', 'Jurusan', 'Tgl Lulus (YYYY-MM-DD)',
         'Nama Kontak Darurat', 'Hubungan Kontak Darurat', 'No HP Kontak Darurat',
@@ -474,7 +474,7 @@ export const accountService = {
               const requiredFields = [
                 'Nama Lengkap (*)', 'NIK KTP (*)', 'Gender (*)', 'Agama (*)', 'Tgl Lahir (YYYY-MM-DD) (*)',
                 'Alamat (*)', 'No Telepon (*)', 'Email (*)', 'Status Nikah (*)',
-                'NIK Internal (*)', 'Jabatan (*)', 'Departemen/Divisi (*)', 'Lokasi Penempatan (*)',
+                'NIK Internal (*)', 'Jabatan (*)', 'Departemen (*)', 'Lokasi Penempatan (*)',
                 'Nomor Kontrak (*)', 'Jenis Kontrak (*)', 'Mulai Kontrak (YYYY-MM-DD) (*)',
                 'Pendidikan Terakhir (*)',
                 'Pilih Jadwal Kerja (*)', 'Jatah Cuti Tahunan (*)',
@@ -593,7 +593,7 @@ export const accountService = {
                 dependents_count: parseInt(getVal('Tanggungan')) || 0,
                 internal_nik: internalNik,
                 position: getVal('Jabatan (*)'),
-                grade: getVal('Departemen/Divisi (*)'),
+                grade: getVal('Departemen (*)'),
                 location_name: getVal('Lokasi Penempatan (*)'),
                 employee_type: employeeType,
                 start_date: formatExcelDate(row['Mulai Kontrak (YYYY-MM-DD) (*)']),

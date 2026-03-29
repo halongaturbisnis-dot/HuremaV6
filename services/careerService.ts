@@ -47,16 +47,13 @@ export const careerService = {
       wsData.getCell(`B${idx + 2}`).value = sch;
     });
 
-    wsImport.addRow(["Harap isi data riwayat karir terbaru karyawan. Baris dengan (*) wajib diisi."]);
-    wsImport.addRow(['']); 
-    
     const headers = [
       'Account ID (Hidden)', 
       'NIK Internal', 
       'Nama Karyawan', 
       'Nomor SK (*)',
       'Jabatan Baru (*)', 
-      'Departemen/Divisi Baru (*)', 
+      'Departemen Baru (*)', 
       'Nama Lokasi (*)', 
       'Nama Jadwal (*)', 
       'Tanggal Perubahan (YYYY-MM-DD) (*)', 
@@ -64,21 +61,55 @@ export const careerService = {
     ];
     wsImport.addRow(headers);
 
-    const headerRow = wsImport.getRow(3);
-    headerRow.font = { bold: true };
+    // Add Description Row (Row 2)
+    const descriptionRow = [
+      'Jangan diubah', 'Referensi', 'Referensi', 'Wajib diisi',
+      'Wajib diisi', 'Wajib diisi', 'Pilih dari daftar', 'Pilih dari daftar',
+      'Format: YYYY-MM-DD', 'Opsional'
+    ];
+    wsImport.addRow(descriptionRow);
 
-    // Mandatory columns: D (Nomor SK), E (Jabatan), F (Dept/Div), G (Nama Lokasi), H (Nama Jadwal), I (Tanggal)
-    [4, 5, 6, 7, 8, 9].forEach(colIdx => {
-      const cell = headerRow.getCell(colIdx);
-      cell.font = { color: { argb: 'FFFF0000' }, bold: true };
+    // Add Example Row (Row 3)
+    const exampleRow = [
+      accounts[0]?.id || 'ID_AKUN', 
+      accounts[0]?.internal_nik || 'NIK001', 
+      accounts[0]?.full_name || 'Nama Karyawan', 
+      'SK/2024/001',
+      'Senior Staff', 
+      'Operasional', 
+      locations[0]?.name || 'Pusat', 
+      'Fleksibel', 
+      new Date().toISOString().split('T')[0], 
+      'Promosi Jabatan'
+    ];
+    wsImport.addRow(exampleRow);
+
+    // Style headers
+    const headerRow = wsImport.getRow(1);
+    headerRow.eachCell((cell) => {
+      const isMandatory = cell.value?.toString().includes('(*)');
+      cell.font = { 
+        bold: true, 
+        color: { argb: isMandatory ? 'FFFF0000' : 'FF000000' } 
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
     });
 
-    accounts?.forEach(acc => {
-      wsImport.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '', '', '', '']);
-    });
+    // Style description row
+    const descRow = wsImport.getRow(2);
+    descRow.font = { italic: true, size: 10 };
+    descRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFF9C4' } // Light yellow
+    };
 
-    const rowCount = wsImport.rowCount;
-    for (let i = 4; i <= rowCount; i++) {
+    // Apply Data Validations (Dropdowns)
+    for (let i = 4; i <= 203; i++) {
       // Location Dropdown (Column G)
       const cellG = wsImport.getCell(`G${i}`);
       cellG.dataValidation = {
@@ -94,16 +125,6 @@ export const careerService = {
         allowBlank: true,
         formulae: [`Data_Reference!$B$2:$B$${uniqueSchedules.length + 1}`]
       };
-
-      // Date Validation (Column I)
-      const cellI = wsImport.getCell(`I${i}`);
-      cellI.dataValidation = {
-        type: 'date',
-        operator: 'greaterThan',
-        allowBlank: true,
-        formulae: [new Date(1900, 0, 1)]
-      };
-      cellI.numFmt = 'yyyy-mm-dd';
     }
 
     wsImport.columns.forEach((col, idx) => {
@@ -126,61 +147,107 @@ export const careerService = {
           const workbook = XLSX.read(data, { type: 'array' });
           const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { range: 2 });
 
-          const results = jsonData.map((row: any) => {
-            let effectiveDate = row['Tanggal Perubahan (YYYY-MM-DD) (*)'];
-            if (typeof effectiveDate === 'number') {
-              effectiveDate = new Date((effectiveDate - 25569) * 86400 * 1000).toISOString().split('T')[0];
-            }
+          const results = jsonData
+            .filter((row: any) => {
+              const accountId = String(row['Account ID (Hidden)'] || '').trim();
+              return accountId !== '' && accountId !== 'ID_AKUN' && accountId !== 'Jangan diubah';
+            })
+            .map((row: any) => {
+              const getVal = (key: string) => row[key] || '';
+              
+              const forceString = (val: any) => {
+                if (val === undefined || val === null) return '';
+                if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
+                return String(val).trim();
+              };
 
-            const skNumber = row['Nomor SK (*)'] || '';
-            let matchedFileId = null;
-            if (skNumber) {
-              const normalizedNo = String(skNumber).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-              const match = Object.entries(bulkFiles).find(([fileName]) => {
-                const normalizedFileName = fileName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                return normalizedFileName === normalizedNo;
-              });
-              if (match) matchedFileId = match[1];
-            }
+              const formatExcelDate = (val: any) => {
+                if (!val) return null;
+                if (typeof val === 'number') {
+                  const date = new Date((val - 25569) * 86400 * 1000);
+                  if (isNaN(date.getTime())) return null;
+                  return date.toISOString().split('T')[0];
+                }
+                const str = String(val).trim();
+                if (!str) return null;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                const parsed = new Date(str);
+                if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+                return str;
+              };
 
-            // Resolve Location ID
-            const locationName = row['Nama Lokasi (*)'] || '';
-            const location = locations.find(l => l.name.trim().toLowerCase() === locationName.trim().toLowerCase());
-            const locationId = location?.id || null;
-
-            // Resolve Schedule ID & Type
-            const scheduleName = row['Nama Jadwal (*)'] || '';
-            let scheduleId = null;
-            let scheduleType = '';
-
-            if (scheduleName.toLowerCase() === 'fleksibel') {
-              scheduleType = 'Fleksibel';
-            } else if (scheduleName.toLowerCase() === 'shift dinamis') {
-              scheduleType = 'Shift Dinamis';
-            } else {
-              const sch = allSchedules.find(s => s.name.trim().toLowerCase() === scheduleName.trim().toLowerCase());
-              if (sch) {
-                scheduleId = sch.id;
-                scheduleType = sch.name;
+              const skNumber = forceString(row['Nomor SK (*)']);
+              let matchedFileId = null;
+              if (skNumber) {
+                const normalizedNo = skNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                Object.entries(bulkFiles).forEach(([fileName, fileId]) => {
+                  const normalizedFileName = fileName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                  if (normalizedFileName === normalizedNo) matchedFileId = fileId;
+                });
               }
-            }
 
-            return {
-              account_id: row['Account ID (Hidden)'],
-              full_name: row['Nama Karyawan'],
-              sk_number: skNumber,
-              position: row['Jabatan Baru (*)'],
-              grade: row['Departemen/Divisi Baru (*)'],
-              location_id: locationId,
-              location_name: locationName,
-              schedule_id: scheduleId,
-              schedule_type: scheduleType,
-              change_date: effectiveDate,
-              notes: row['Catatan / Keterangan'] || null,
-              file_sk_id: matchedFileId,
-              isValid: !!(row['Account ID (Hidden)'] && skNumber && row['Jabatan Baru (*)'] && row['Departemen/Divisi Baru (*)'] && locationId && scheduleType && effectiveDate)
-            };
-          });
+              // Resolve Location ID
+              const locationName = getVal('Nama Lokasi (*)');
+              const location = locations.find(l => l.name.trim().toLowerCase() === locationName.trim().toLowerCase());
+              const locationId = location?.id || null;
+
+              // Resolve Schedule ID & Type
+              const scheduleName = getVal('Nama Jadwal (*)');
+              let scheduleId = null;
+              let scheduleType = '';
+
+              if (scheduleName.toLowerCase() === 'fleksibel') {
+                scheduleType = 'Fleksibel';
+              } else if (scheduleName.toLowerCase() === 'shift dinamis') {
+                scheduleType = 'Shift Dinamis';
+              } else {
+                const sch = allSchedules.find(s => s.name.trim().toLowerCase() === scheduleName.trim().toLowerCase());
+                if (sch) {
+                  scheduleId = sch.id;
+                  scheduleType = sch.name;
+                }
+              }
+
+              const requiredFields = [
+                'Account ID (Hidden)', 'Nomor SK (*)', 'Jabatan Baru (*)', 
+                'Departemen Baru (*)', 'Nama Lokasi (*)', 'Nama Jadwal (*)', 
+                'Tanggal Perubahan (YYYY-MM-DD) (*)'
+              ];
+
+              let errorMsg = '';
+              const missingFields = requiredFields.filter(field => {
+                const val = row[field];
+                return val === undefined || val === null || String(val).trim() === '';
+              });
+
+              if (missingFields.length > 0) {
+                const cleanNames = missingFields.map(f => f.replace(' (*)', '').replace(' (YYYY-MM-DD)', ''));
+                errorMsg = `Kolom wajib belum lengkap: [${cleanNames.join(', ')}]`;
+              } else if (!locationId) {
+                errorMsg = `Lokasi '${locationName}' tidak ditemukan.`;
+              } else if (!scheduleType) {
+                errorMsg = `Jadwal '${scheduleName}' tidak ditemukan.`;
+              }
+
+              const isValid = !errorMsg;
+
+              return {
+                account_id: row['Account ID (Hidden)'],
+                full_name: row['Nama Karyawan'],
+                sk_number: skNumber,
+                position: row['Jabatan Baru (*)'],
+                grade: row['Departemen Baru (*)'],
+                location_id: locationId,
+                location_name: locationName,
+                schedule_id: scheduleId,
+                schedule_type: scheduleType,
+                change_date: formatExcelDate(row['Tanggal Perubahan (YYYY-MM-DD) (*)']),
+                notes: row['Catatan / Keterangan'] || null,
+                file_sk_id: matchedFileId,
+                isValid,
+                errorMsg
+              };
+            });
           resolve(results);
         } catch (err) { reject(err); }
       };
