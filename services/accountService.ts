@@ -445,6 +445,16 @@ export const accountService = {
                 }
                 const str = String(val).trim();
                 if (!str) return null;
+
+                // Handle DD/MM/YYYY or DD-MM-YYYY format
+                const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (ddmmyyyy) {
+                  const day = ddmmyyyy[1].padStart(2, '0');
+                  const month = ddmmyyyy[2].padStart(2, '0');
+                  const year = ddmmyyyy[3];
+                  return `${year}-${month}-${day}`;
+                }
+
                 // Basic check for YYYY-MM-DD
                 if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
                 // Try parsing other formats if possible, but YYYY-MM-DD is preferred

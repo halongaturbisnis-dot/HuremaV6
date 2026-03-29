@@ -152,7 +152,7 @@ export const careerService = {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { range: 2 });
+          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
 
           const results = jsonData
             .filter((row: any) => {
@@ -178,6 +178,16 @@ export const careerService = {
                 }
                 const str = String(val).trim();
                 if (!str) return null;
+
+                // Handle DD/MM/YYYY or DD-MM-YYYY format
+                const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (ddmmyyyy) {
+                  const day = ddmmyyyy[1].padStart(2, '0');
+                  const month = ddmmyyyy[2].padStart(2, '0');
+                  const year = ddmmyyyy[3];
+                  return `${year}-${month}-${day}`;
+                }
+
                 if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
                 const parsed = new Date(str);
                 if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
