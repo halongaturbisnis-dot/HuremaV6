@@ -454,7 +454,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ onClose, onSubmit, initialDat
                             )}
                           </div>
                           <div className="space-y-1 relative" ref={gradeRef}>
-                            <Label htmlFor="grade">Golongan</Label>
+                            <Label htmlFor="grade">Departemen</Label>
                             <div className="relative">
                               <input 
                                 id="grade"

@@ -6,6 +6,7 @@ import { googleDriveService } from '../../services/googleDriveService';
 import { accountService } from '../../services/accountService';
 import { CareerLogExtended } from '../../types';
 import CareerImportModal from './CareerImportModal';
+import CareerDetailModal from '../account/CareerDetailModal';
 import LogForm from '../account/LogForm';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
 
@@ -203,15 +204,14 @@ const CareerLogMain: React.FC = () => {
               <th className="px-6 py-4">Perubahan Karir</th>
               <th className="px-6 py-4">Penempatan</th>
               <th className="px-6 py-4">Tgl Efektif</th>
-              <th className="px-6 py-4">Dokumen SK</th>
               <th className="px-6 py-4 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
-              <tr><td colSpan={7} className="text-center py-20 text-gray-400">Memuat data log...</td></tr>
+              <tr><td colSpan={6} className="text-center py-20 text-gray-400">Memuat data log...</td></tr>
             ) : filteredLogs.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-20 text-gray-400">Tidak ada log karir ditemukan.</td></tr>
+              <tr><td colSpan={6} className="text-center py-20 text-gray-400">Tidak ada log karir ditemukan.</td></tr>
             ) : (
               filteredLogs.map(log => {
                 const isSelected = selectedIds.includes(log.id);
@@ -251,30 +251,13 @@ const CareerLogMain: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-xs font-bold text-[#006E62]">{log.position}</div>
-                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Departemen/Divisi: {log.grade || '-'}</div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Departemen: {log.grade || '-'}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-xs text-gray-600 font-medium">{log.location_name}</div>
                     </td>
                     <td className="px-6 py-4 text-xs font-bold text-gray-500">
                       {formatDate(log.change_date)}
-                    </td>
-                    <td className="px-6 py-4">
-                      {log.file_sk_id ? (
-                        <a 
-                          href={googleDriveService.getFileUrl(log.file_sk_id).replace('=s1600', '=s0')} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#006E62] bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition-colors"
-                        >
-                          <Paperclip size={12} /> LIHAT SK
-                        </a>
-                      ) : (
-                        <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded cursor-pointer hover:bg-orange-100 transition-colors">
-                          <Upload size={12} /> LAMPIRKAN SK
-                          <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleManualUploadSK(e, log)} />
-                        </label>
-                      )}
                     </td>
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">
@@ -311,86 +294,14 @@ const CareerLogMain: React.FC = () => {
 
       {/* Detail Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-2 text-[#006E62]">
-                <Info size={20} />
-                <h3 className="font-bold text-gray-800">Detail Log Karir</h3>
-              </div>
-              <button onClick={() => setSelectedLog(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="flex items-center gap-4 p-4 bg-emerald-50/30 rounded-lg border border-emerald-100/50">
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 text-gray-400 shadow-sm overflow-hidden">
-                  {selectedLog.account?.photo_google_id ? (
-                    <img 
-                      src={googleDriveService.getFileUrl(selectedLog.account.photo_google_id)} 
-                      alt="" 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <UserCircle size={32} />
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900">{selectedLog.account?.full_name}</h4>
-                  <p className="text-xs font-mono text-gray-500 uppercase tracking-wider">{selectedLog.account?.internal_nik}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jabatan</p>
-                  <p className="text-sm font-bold text-[#006E62]">{selectedLog.position}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Departemen/Divisi</p>
-                  <p className="text-sm font-bold text-gray-800">{selectedLog.grade || '-'}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lokasi</p>
-                  <p className="text-sm font-medium text-gray-700">{selectedLog.location_name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal Efektif</p>
-                  <p className="text-sm font-bold text-gray-700">{formatDate(selectedLog.change_date)}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-4 border-t border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Catatan / Keterangan</p>
-                <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
-                  {selectedLog.notes || 'Tidak ada catatan.'}
-                </p>
-              </div>
-
-              {selectedLog.file_sk_id && (
-                <div className="pt-4">
-                  <a 
-                    href={googleDriveService.getFileUrl(selectedLog.file_sk_id).replace('=s1600', '=s0')}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-50 text-[#006E62] rounded-lg font-bold text-sm hover:bg-emerald-100 transition-all border border-emerald-200"
-                  >
-                    <Paperclip size={18} /> LIHAT DOKUMEN SK
-                  </a>
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-              <button 
-                onClick={() => setSelectedLog(null)}
-                className="px-6 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        <CareerDetailModal 
+          log={selectedLog} 
+          onClose={() => setSelectedLog(null)} 
+          onEdit={() => {
+            setSelectedLog(null);
+            setEditingLog(selectedLog);
+          }}
+        />
       )}
 
       {/* Edit Modal - Using Standard LogForm */}

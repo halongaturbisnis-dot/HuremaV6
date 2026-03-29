@@ -196,14 +196,14 @@ const SalarySchemeAssignment: React.FC<SalarySchemeAssignmentProps> = ({ onBack 
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                    <GraduationCap size={12} /> Golongan
+                    <GraduationCap size={12} /> Departemen
                   </label>
                   <select
                     value={filterGrade}
                     onChange={(e) => setFilterGrade(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 border-none rounded-lg text-xs focus:ring-2 focus:ring-[#006E62] transition-all"
                   >
-                    <option value="">Semua Golongan</option>
+                    <option value="">Semua Departemen</option>
                     {distinctAttrs.grades.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>

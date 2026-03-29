@@ -431,7 +431,7 @@ const PayslipDetail: React.FC<PayslipDetailProps> = ({ payroll, onBack }) => {
                   </div>
                   <div className="space-y-4" style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
                     <div className="space-y-1" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#9ca3af', fontSize: '10px', fontWeight: '700' }}>Golongan / Jabatan</div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#9ca3af', fontSize: '10px', fontWeight: '700' }}>Departemen / Jabatan</div>
                       <div className="text-sm font-bold" style={{ color: '#1f2937', fontSize: '14px', fontWeight: '700' }}>{viewingItem.account?.grade || '-'} / {viewingItem.account?.position}</div>
                     </div>
                     <div className="space-y-1" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

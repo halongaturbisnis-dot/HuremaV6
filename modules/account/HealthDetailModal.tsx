@@ -1,15 +1,16 @@
 
 import React from 'react';
-import { X, Heart, FileText, Paperclip, ExternalLink, Calendar, ShieldCheck } from 'lucide-react';
+import { X, Heart, FileText, Paperclip, ExternalLink, Calendar, ShieldCheck, Edit2 } from 'lucide-react';
 import { HealthLog } from '../../types';
 import { googleDriveService } from '../../services/googleDriveService';
 
 interface HealthDetailModalProps {
   log: HealthLog;
   onClose: () => void;
+  onEdit?: () => void;
 }
 
-const HealthDetailModal: React.FC<HealthDetailModalProps> = ({ log, onClose }) => {
+const HealthDetailModal: React.FC<HealthDetailModalProps> = ({ log, onClose, onEdit }) => {
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('id-ID', {
@@ -127,13 +128,21 @@ const HealthDetailModal: React.FC<HealthDetailModalProps> = ({ log, onClose }) =
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-white shrink-0">
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-white shrink-0">
           <button 
             onClick={onClose} 
             className="px-8 py-2 bg-gray-100 text-gray-600 rounded text-xs font-bold uppercase hover:bg-gray-200 transition-colors"
           >
             Tutup
           </button>
+          {onEdit && (
+            <button 
+              onClick={onEdit} 
+              className="px-8 py-2 bg-[#006E62] text-white rounded text-xs font-bold uppercase hover:bg-[#005a50] transition-colors flex items-center gap-2"
+            >
+              <Edit2 size={14} /> Edit
+            </button>
+          )}
         </div>
       </div>
     </div>

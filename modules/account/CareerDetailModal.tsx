@@ -1,15 +1,16 @@
 
 import React from 'react';
-import { X, Briefcase, FileText, Paperclip, ExternalLink, MapPin, Calendar, CalendarClock } from 'lucide-react';
+import { X, Briefcase, FileText, Paperclip, ExternalLink, MapPin, Calendar, CalendarClock, Edit2 } from 'lucide-react';
 import { CareerLog } from '../../types';
 import { googleDriveService } from '../../services/googleDriveService';
 
 interface CareerDetailModalProps {
   log: CareerLog;
   onClose: () => void;
+  onEdit?: () => void;
 }
 
-const CareerDetailModal: React.FC<CareerDetailModalProps> = ({ log, onClose }) => {
+const CareerDetailModal: React.FC<CareerDetailModalProps> = ({ log, onClose, onEdit }) => {
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('id-ID', {
@@ -48,7 +49,7 @@ const CareerDetailModal: React.FC<CareerDetailModalProps> = ({ log, onClose }) =
               <div className="bg-white p-4 rounded border border-gray-100 shadow-sm">
                 <div className="flex items-center gap-2 mb-1">
                   <Briefcase size={14} className="text-[#006E62]" />
-                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Jabatan & Golongan</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Jabatan & Departemen</p>
                 </div>
                 <p className="text-sm font-bold text-gray-700">{log.position} {log.grade ? `(${log.grade})` : ''}</p>
               </div>
@@ -134,13 +135,21 @@ const CareerDetailModal: React.FC<CareerDetailModalProps> = ({ log, onClose }) =
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-white shrink-0">
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-white shrink-0">
           <button 
             onClick={onClose} 
             className="px-8 py-2 bg-gray-100 text-gray-600 rounded text-xs font-bold uppercase hover:bg-gray-200 transition-colors"
           >
             Tutup
           </button>
+          {onEdit && (
+            <button 
+              onClick={onEdit} 
+              className="px-8 py-2 bg-[#006E62] text-white rounded text-xs font-bold uppercase hover:bg-[#005a50] transition-colors flex items-center gap-2"
+            >
+              <Edit2 size={14} /> Edit
+            </button>
+          )}
         </div>
       </div>
     </div>

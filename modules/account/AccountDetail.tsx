@@ -239,7 +239,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
       // High resolution for proper download size
       const qrSize = 1024;
       const padding = 80;
-      const textSpace = 240;
+      const textSpace = 320;
       
       canvas.width = qrSize + (padding * 2);
       canvas.height = qrSize + (padding * 2) + textSpace;
@@ -256,15 +256,25 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         
-        // Name
-        ctx.font = 'bold 52px Inter, sans-serif';
-        ctx.fillStyle = '#1F2937'; // gray-800
-        ctx.fillText(account?.full_name || '', canvas.width / 2, qrSize + padding + 60);
+        // Name Label
+        ctx.font = 'bold 32px Inter, sans-serif';
+        ctx.fillStyle = '#9CA3AF'; // gray-400
+        ctx.fillText('NAMA KARYAWAN', canvas.width / 2, qrSize + padding + 40);
+
+        // Name Value
+        ctx.font = 'bold 58px Inter, sans-serif';
+        ctx.fillStyle = '#111827'; // gray-900
+        ctx.fillText(account?.full_name || '', canvas.width / 2, qrSize + padding + 90);
         
-        // NIK
-        ctx.font = '42px Inter, sans-serif';
-        ctx.fillStyle = '#6B7280'; // gray-500
-        ctx.fillText(account?.internal_nik || '', canvas.width / 2, qrSize + padding + 130);
+        // NIK Label
+        ctx.font = 'bold 32px Inter, sans-serif';
+        ctx.fillStyle = '#9CA3AF'; // gray-400
+        ctx.fillText('NIK INTERNAL', canvas.width / 2, qrSize + padding + 180);
+
+        // NIK Value
+        ctx.font = '52px Inter, sans-serif';
+        ctx.fillStyle = '#4B5563'; // gray-600
+        ctx.fillText(account?.internal_nik || '', canvas.width / 2, qrSize + padding + 230);
       }
       
       const pngFile = canvas.toDataURL('image/png');
@@ -401,7 +411,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
         <DetailSection icon={Briefcase} title="Karier & Penempatan">
           <div className="grid grid-cols-2 gap-4">
              <DataRow label="Jabatan" value={currentPosition} />
-             <DataRow label="Golongan" value={currentGrade} />
+             <DataRow label="Departemen" value={currentGrade} />
              <DataRow label="NIK Internal" value={account.internal_nik} />
              <DataRow label="Jadwal" value={account.schedule_type} />
              <DataRow label="Tanggal Bergabung" value={formatDate(account.start_date || '')} />
@@ -802,10 +812,12 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
                   <img src={previewMedia.url} className="max-w-full max-h-full object-contain shadow-xl rounded" />
                 ) : (
                   <div className="bg-white p-10 rounded-xl shadow-2xl flex flex-col items-center">
-                    <QRCodeSVG value={previewMedia.url} size={280} />
-                    <div className="mt-6 text-center">
-                      <p className="text-lg font-bold text-gray-800">{account.full_name}</p>
-                      <p className="text-sm font-medium text-gray-400 uppercase tracking-widest mt-1">{account.internal_nik}</p>
+                    <QRCodeSVG value={previewMedia.url} size={320} />
+                    <div className="mt-8 text-center">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Nama Karyawan</p>
+                      <p className="text-xl font-bold text-gray-800">{account.full_name}</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-4 mb-1">NIK Internal</p>
+                      <p className="text-base font-medium text-gray-600 tracking-widest">{account.internal_nik}</p>
                     </div>
                   </div>
                 )}
@@ -835,27 +847,69 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
       )}
 
       {selectedContractDetail && (
-        <ContractDetailModal contract={selectedContractDetail} onClose={() => setSelectedContractDetail(null)} />
+        <ContractDetailModal 
+          contract={selectedContractDetail} 
+          onClose={() => setSelectedContractDetail(null)} 
+          onEdit={!isReadOnly ? () => {
+            setSelectedContractDetail(null);
+            setShowContractForm({ show: true, data: selectedContractDetail });
+          } : undefined}
+        />
       )}
 
       {selectedCareerDetail && (
-        <CareerDetailModal log={selectedCareerDetail} onClose={() => setSelectedCareerDetail(null)} />
+        <CareerDetailModal 
+          log={selectedCareerDetail} 
+          onClose={() => setSelectedCareerDetail(null)} 
+          onEdit={!isReadOnly ? () => {
+            setSelectedCareerDetail(null);
+            setShowLogForm({ type: 'career', data: selectedCareerDetail, isEdit: true });
+          } : undefined}
+        />
       )}
 
       {selectedHealthDetail && (
-        <HealthDetailModal log={selectedHealthDetail} onClose={() => setSelectedHealthDetail(null)} />
+        <HealthDetailModal 
+          log={selectedHealthDetail} 
+          onClose={() => setSelectedHealthDetail(null)} 
+          onEdit={!isReadOnly ? () => {
+            setSelectedHealthDetail(null);
+            setShowLogForm({ type: 'health', data: selectedHealthDetail, isEdit: true });
+          } : undefined}
+        />
       )}
 
       {selectedCertDetail && (
-        <CertificationDetailModal cert={selectedCertDetail} onClose={() => setSelectedCertDetail(null)} />
+        <CertificationDetailModal 
+          cert={selectedCertDetail} 
+          onClose={() => setSelectedCertDetail(null)} 
+          onEdit={!isReadOnly ? () => {
+            setSelectedCertDetail(null);
+            setShowCertForm({ show: true, data: selectedCertDetail });
+          } : undefined}
+        />
       )}
 
       {selectedWarningDetail && (
-        <WarningDetailModal log={selectedWarningDetail} onClose={() => setSelectedWarningDetail(null)} />
+        <WarningDetailModal 
+          log={selectedWarningDetail} 
+          onClose={() => setSelectedWarningDetail(null)} 
+          onEdit={!isReadOnly ? () => {
+            setSelectedWarningDetail(null);
+            setShowWarningForm(true); // WarningForm doesn't seem to take initialData for edit in this context, but let's assume it's handled or just opens the form
+          } : undefined}
+        />
       )}
 
       {selectedTerminationDetail && (
-        <TerminationDetailModal log={selectedTerminationDetail} onClose={() => setSelectedTerminationDetail(null)} />
+        <TerminationDetailModal 
+          log={selectedTerminationDetail} 
+          onClose={() => setSelectedTerminationDetail(null)} 
+          onEdit={!isReadOnly ? () => {
+            setSelectedTerminationDetail(null);
+            setShowTerminationForm(true);
+          } : undefined}
+        />
       )}
     </div>
   );

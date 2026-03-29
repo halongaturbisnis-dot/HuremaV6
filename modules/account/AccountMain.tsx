@@ -483,7 +483,7 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
             </div>
             <div className="grid grid-cols-2 gap-4">
               <DetailRow label="Jabatan" value={selfAccount.position} />
-              <DetailRow label="Golongan" value={selfAccount.grade} />
+              <DetailRow label="Departemen" value={selfAccount.grade} />
               <DetailRow label="NIK Internal" value={selfAccount.internal_nik} />
               <DetailRow label="Tipe Karyawan" value={selfAccount.employee_type} />
               <DetailRow label="Jadwal" value={selfAccount.schedule_type} />
@@ -534,8 +534,8 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
       {/* Internal Sub-Tabs Navigation */}
       <div className="flex border-b border-gray-100 overflow-x-auto scrollbar-none bg-white -mt-4 mb-6">
         <SubTab id="data" label="Data Akun" icon={Users} />
-        <SubTab id="career" label="Log Karir" icon={History} />
         <SubTab id="contract" label="Kontrak Kerja" icon={FileBadge} />
+        <SubTab id="career" label="Log Karir" icon={History} />
         <SubTab id="cert" label="Sertifikasi" icon={Award} />
         <SubTab id="health" label="Log Kesehatan" icon={Activity} />
         <SubTab id="discipline" label="Peringatan & Keluar" icon={ShieldAlert} />
