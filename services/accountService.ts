@@ -349,7 +349,13 @@ export const accountService = {
       const educationList = ['Tidak Sekolah', 'SD', 'SMP/Setara', 'SMA/Setara', 'Diploma 1-4', 'Sarjana', 'Profesi', 'Master', 'Doktor'];
       const yesNoList = ['Ya', 'Tidak'];
       const locList = locations.map(l => l.name);
-      const schList = ['Fleksibel', 'Shift Dinamis', ...schedules.map(s => s.name)];
+      const schList = [
+        'Fleksibel', 
+        'Shift Dinamis', 
+        ...schedules
+          .filter(s => s.type === 1 || s.type === 2)
+          .map(s => s.name)
+      ];
 
       // Write lists to hidden sheet
       refSheet.getColumn(1).values = genderList;

@@ -40,7 +40,8 @@ export const careerService = {
 
     // Add schedules to reference sheet
     wsData.getCell('B1').value = 'Schedules';
-    const uniqueSchedules = Array.from(new Set(allSchedules.map(s => s.name)));
+    const filteredSchedules = allSchedules.filter(s => s.type === 1 || s.type === 2);
+    const uniqueSchedules = Array.from(new Set(filteredSchedules.map(s => s.name)));
     uniqueSchedules.push('Fleksibel');
     uniqueSchedules.push('Shift Dinamis');
     uniqueSchedules.forEach((sch, idx) => {
@@ -71,9 +72,9 @@ export const careerService = {
 
     // Add Example Row (Row 3)
     const exampleRow = [
-      accounts[0]?.id || 'ID_AKUN', 
-      accounts[0]?.internal_nik || 'NIK001', 
-      accounts[0]?.full_name || 'Nama Karyawan', 
+      'ID_AKUN', 
+      'NIK001', 
+      'Contoh Nama', 
       'SK/2024/001',
       'Senior Staff', 
       'Operasional', 
@@ -83,6 +84,11 @@ export const careerService = {
       'Promosi Jabatan'
     ];
     wsImport.addRow(exampleRow);
+
+    // Add All Accounts (Row 4 onwards)
+    accounts.forEach(acc => {
+      wsImport.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '', '', '', '']);
+    });
 
     // Style headers
     const headerRow = wsImport.getRow(1);
@@ -109,7 +115,8 @@ export const careerService = {
     };
 
     // Apply Data Validations (Dropdowns)
-    for (let i = 4; i <= 203; i++) {
+    const totalRows = 3 + accounts.length;
+    for (let i = 4; i <= totalRows; i++) {
       // Location Dropdown (Column G)
       const cellG = wsImport.getCell(`G${i}`);
       cellG.dataValidation = {
@@ -150,7 +157,8 @@ export const careerService = {
           const results = jsonData
             .filter((row: any) => {
               const accountId = String(row['Account ID (Hidden)'] || '').trim();
-              return accountId !== '' && accountId !== 'ID_AKUN' && accountId !== 'Jangan diubah';
+              const skNumber = String(row['Nomor SK (*)'] || '').trim();
+              return accountId !== '' && accountId !== 'ID_AKUN' && accountId !== 'Jangan diubah' && skNumber !== '';
             })
             .map((row: any) => {
               const getVal = (key: string) => row[key] || '';
