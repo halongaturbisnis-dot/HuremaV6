@@ -6,6 +6,8 @@ import { contractService } from '../../services/contractService';
 import { googleDriveService } from '../../services/googleDriveService';
 import { AccountContractExtended } from '../../types';
 import ContractImportModal from './ContractImportModal';
+import ContractDetailModal from './ContractDetailModal';
+import ContractFormModal from './ContractFormModal';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
 
 const ContractMain: React.FC = () => {
@@ -13,10 +15,12 @@ const ContractMain: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedContract, setSelectedContract] = useState<AccountContractExtended | null>(null);
   const [editingContract, setEditingContract] = useState<AccountContractExtended | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'ending_soon' | 'expired'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   useEffect(() => {
     fetchContracts();
@@ -34,28 +38,36 @@ const ContractMain: React.FC = () => {
     }
   };
 
-  const handleManualUpload = async (e: React.ChangeEvent<HTMLInputElement>, contract: AccountContractExtended) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setUploadingId(contract.id);
-      const fileId = await googleDriveService.uploadFile(file);
-      await contractService.update(contract.id, { file_id: fileId });
-      
-      setContracts(prev => prev.map(c => c.id === contract.id ? { ...c, file_id: fileId } : c));
-      Swal.fire({ title: 'Berhasil!', text: 'Dokumen kontrak telah dilampirkan.', icon: 'success', timer: 1500, showConfirmButton: false });
-    } catch (error) {
-      Swal.fire('Gagal', 'Gagal mengunggah dokumen', 'error');
-    } finally {
-      setUploadingId(null);
-    }
-  };
 
   const filteredContracts = contracts.filter(c => {
     const searchStr = `${c.account?.full_name} ${c.account?.internal_nik} ${c.contract_number} ${c.contract_type}`.toLowerCase();
-    return searchStr.includes(searchTerm.toLowerCase());
+    const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+    
+    if (!matchesSearch) return false;
+
+    if (filterType === 'ending_soon') {
+      if (!c.end_date) return false;
+      const diff = (new Date(c.end_date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
+      return diff >= 0 && diff < 30;
+    }
+    
+    if (filterType === 'expired') {
+      return c.end_date && new Date(c.end_date) < new Date();
+    }
+
+    return true;
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredContracts.length / itemsPerPage);
+  const paginatedContracts = filteredContracts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType]);
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
@@ -142,27 +154,31 @@ const ContractMain: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredContracts.length) {
+    if (selectedIds.length === paginatedContracts.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredContracts.map(c => c.id));
+      setSelectedIds(paginatedContracts.map(c => c.id));
     }
   };
 
   return (
     <div className="space-y-6">
-      {uploadingId && <LoadingSpinner message="Mengunggah Dokumen..." />}
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white border border-gray-100 p-4 rounded-md shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 rounded-md text-blue-600"><FileText size={24} /></div>
+        <div 
+          onClick={() => setFilterType('all')}
+          className={`p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all border ${filterType === 'all' ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
+        >
+          <div className={`p-3 rounded-md ${filterType === 'all' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}><FileText size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase">Total Kontrak Terdata</p>
             <p className="text-xl font-bold text-gray-800">{contracts.length}</p>
           </div>
         </div>
-        <div className="bg-white border border-gray-100 p-4 rounded-md shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-orange-50 rounded-md text-orange-600"><AlertCircle size={24} /></div>
+        <div 
+          onClick={() => setFilterType('ending_soon')}
+          className={`p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all border ${filterType === 'ending_soon' ? 'bg-orange-50 border-orange-200 ring-2 ring-orange-100' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
+        >
+          <div className={`p-3 rounded-md ${filterType === 'ending_soon' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-600'}`}><AlertCircle size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase">Akan Berakhir (30 Hari)</p>
             <p className="text-xl font-bold text-gray-800">
@@ -174,8 +190,11 @@ const ContractMain: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="bg-white border border-gray-100 p-4 rounded-md shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-red-50 rounded-md text-red-600"><Calendar size={24} /></div>
+        <div 
+          onClick={() => setFilterType('expired')}
+          className={`p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all border ${filterType === 'expired' ? 'bg-red-50 border-red-200 ring-2 ring-red-100' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
+        >
+          <div className={`p-3 rounded-md ${filterType === 'expired' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600'}`}><Calendar size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase">Sudah Kadaluarsa</p>
             <p className="text-xl font-bold text-gray-800">
@@ -210,7 +229,7 @@ const ContractMain: React.FC = () => {
             onClick={() => setShowImportModal(true)}
             className="flex items-center gap-2 bg-[#006E62] text-white px-4 py-2 rounded-md hover:bg-[#005a50] transition-colors shadow-sm text-sm font-medium"
           >
-            <FileUp size={18} /> Perpanjangan Massal
+            <FileUp size={18} /> IMPOR MASSAL
           </button>
         </div>
       </div>
@@ -223,7 +242,7 @@ const ContractMain: React.FC = () => {
                 <input 
                   type="checkbox" 
                   className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                  checked={selectedIds.length === filteredContracts.length && filteredContracts.length > 0}
+                  checked={selectedIds.length === paginatedContracts.length && paginatedContracts.length > 0}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -231,17 +250,16 @@ const ContractMain: React.FC = () => {
               <th className="px-6 py-4">Nomor & Jenis Kontrak</th>
               <th className="px-6 py-4">Masa Berlaku</th>
               <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Dokumen PDF</th>
               <th className="px-6 py-4 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
-              <tr><td colSpan={7} className="text-center py-20 text-gray-400">Memuat data kontrak...</td></tr>
-            ) : filteredContracts.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-20 text-gray-400">Tidak ada data kontrak ditemukan.</td></tr>
+              <tr><td colSpan={6} className="text-center py-20 text-gray-400">Memuat data kontrak...</td></tr>
+            ) : paginatedContracts.length === 0 ? (
+              <tr><td colSpan={6} className="text-center py-20 text-gray-400">Tidak ada data kontrak ditemukan.</td></tr>
             ) : (
-              filteredContracts.map(c => {
+              paginatedContracts.map(c => {
                 const isSelected = selectedIds.includes(c.id);
                 return (
                   <tr 
@@ -287,23 +305,6 @@ const ContractMain: React.FC = () => {
                     <td className="px-6 py-4">
                       {getStatusBadge(c.end_date)}
                     </td>
-                    <td className="px-6 py-4">
-                      {c.file_id ? (
-                        <a 
-                          href={googleDriveService.getFileUrl(c.file_id, true)} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#006E62] bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition-colors"
-                        >
-                          <Paperclip size={12} /> LIHAT {c.file_id.includes('|') && !/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(c.file_id.split('|')[1]) ? 'PDF' : 'DOKUMEN'}
-                        </a>
-                      ) : (
-                        <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded cursor-pointer hover:bg-orange-100 transition-colors">
-                          <Upload size={12} /> UPLOAD PDF
-                          <input type="file" className="hidden" accept="application/pdf" onChange={(e) => handleManualUpload(e, c)} />
-                        </label>
-                      )}
-                    </td>
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">
                         <button 
@@ -330,6 +331,40 @@ const ContractMain: React.FC = () => {
         </table>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white px-6 py-4 border border-gray-100 rounded-md shadow-sm">
+          <div className="text-xs text-gray-500">
+            Menampilkan <span className="font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> - <span className="font-bold">{Math.min(currentPage * itemsPerPage, filteredContracts.length)}</span> dari <span className="font-bold">{filteredContracts.length}</span> data
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => prev - 1)}
+              className="p-2 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <X size={16} className="rotate-180" />
+            </button>
+            {[...Array(totalPages)].map((_, i) => (
+              <button
+                key={i + 1}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`w-8 h-8 text-xs font-bold rounded transition-all ${currentPage === i + 1 ? 'bg-[#006E62] text-white shadow-md' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => prev + 1)}
+              className="p-2 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {showImportModal && (
         <ContractImportModal 
           onClose={() => setShowImportModal(false)} 
@@ -339,217 +374,27 @@ const ContractMain: React.FC = () => {
 
       {/* Detail Modal */}
       {selectedContract && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-2 text-[#006E62]">
-                <Info size={20} />
-                <h3 className="font-bold text-gray-800">Detail Kontrak Kerja</h3>
-              </div>
-              <button onClick={() => setSelectedContract(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="flex items-center gap-4 p-4 bg-emerald-50/30 rounded-lg border border-emerald-100/50">
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 text-gray-400 shadow-sm overflow-hidden">
-                  {selectedContract.account?.photo_google_id ? (
-                    <img 
-                      src={googleDriveService.getFileUrl(selectedContract.account.photo_google_id)} 
-                      alt="" 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <UserCircle size={32} />
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900">{selectedContract.account?.full_name}</h4>
-                  <p className="text-xs font-mono text-gray-500 uppercase tracking-wider">{selectedContract.account?.internal_nik}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nomor Kontrak</p>
-                  <p className="text-sm font-bold text-[#006E62]">{selectedContract.contract_number}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jenis Kontrak</p>
-                  <p className="text-sm font-bold text-gray-800">{selectedContract.contract_type}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal Mulai</p>
-                  <p className="text-sm font-medium text-gray-700">{formatDate(selectedContract.start_date)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal Berakhir</p>
-                  <p className="text-sm font-bold text-gray-700">{formatDate(selectedContract.end_date)}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-4 border-t border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Catatan / Keterangan</p>
-                <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
-                  {selectedContract.notes || 'Tidak ada catatan.'}
-                </p>
-              </div>
-
-              {selectedContract.file_id && (
-                <div className="pt-4">
-                  <a 
-                    href={googleDriveService.getFileUrl(selectedContract.file_id, true)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-50 text-[#006E62] rounded-lg font-bold text-sm hover:bg-emerald-100 transition-all border border-emerald-200"
-                  >
-                    <Paperclip size={18} /> LIHAT DOKUMEN KONTRAK
-                  </a>
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-              <button 
-                onClick={() => setSelectedContract(null)}
-                className="px-6 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        <ContractDetailModal 
+          contract={selectedContract} 
+          onClose={() => setSelectedContract(null)} 
+          onEdit={() => {
+            const contractToEdit = selectedContract;
+            setSelectedContract(null);
+            setEditingContract(contractToEdit);
+          }}
+        />
       )}
 
       {/* Edit Modal */}
       {editingContract && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-2 text-[#006E62]">
-                <Edit2 size={20} />
-                <h3 className="font-bold text-gray-800">Edit Kontrak Kerja</h3>
-              </div>
-              <button onClick={() => setEditingContract(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const file = (formData.get('file_kontrak') as File);
-              
-              const data: any = {
-                contract_number: formData.get('contract_number') as string,
-                contract_type: formData.get('contract_type') as string,
-                start_date: formData.get('start_date') as string,
-                end_date: formData.get('end_date') as string,
-                notes: formData.get('notes') as string,
-              };
-              
-              try {
-                setIsLoading(true);
-                
-                if (file && file.size > 0) {
-                  if (editingContract.file_id) {
-                    await googleDriveService.deleteFile(editingContract.file_id);
-                  }
-                  const newFileId = await googleDriveService.uploadFile(file);
-                  data.file_id = newFileId;
-                }
-
-                await contractService.update(editingContract.id, data);
-                setContracts(prev => prev.map(c => c.id === editingContract.id ? { ...c, ...data } : c));
-                setEditingContract(null);
-                Swal.fire({ title: 'Berhasil!', text: 'Data kontrak telah diperbarui.', icon: 'success', timer: 1500, showConfirmButton: false });
-              } catch (error) {
-                Swal.fire('Gagal', 'Gagal memperbarui data kontrak', 'error');
-              } finally {
-                setIsLoading(false);
-              }
-            }} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nomor Kontrak</label>
-                <input 
-                  name="contract_number"
-                  defaultValue={editingContract.contract_number}
-                  required
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jenis Kontrak</label>
-                <select 
-                  name="contract_type"
-                  defaultValue={editingContract.contract_type}
-                  required
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                >
-                  <option value="PKWT">PKWT</option>
-                  <option value="PKWTT">PKWTT</option>
-                  <option value="Harian Lepas">Harian Lepas</option>
-                  <option value="Magang">Magang</option>
-                  <option value="Outsourcing">Outsourcing</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tgl Mulai</label>
-                  <input 
-                    type="date"
-                    name="start_date"
-                    defaultValue={editingContract.start_date || ''}
-                    required
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tgl Berakhir</label>
-                  <input 
-                    type="date"
-                    name="end_date"
-                    defaultValue={editingContract.end_date || ''}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Catatan</label>
-                <textarea 
-                  name="notes"
-                  defaultValue={editingContract.notes || ''}
-                  rows={3}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium resize-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ganti Dokumen Kontrak (Opsional)</label>
-                <input 
-                  type="file"
-                  name="file_kontrak"
-                  accept="application/pdf"
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                />
-                {editingContract.file_id && <p className="text-[10px] text-orange-500 font-medium italic">* Mengunggah file baru akan menghapus file lama.</p>}
-              </div>
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setEditingContract(null)}
-                  className="flex-1 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all"
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 py-2.5 bg-[#006E62] text-white rounded-lg text-sm font-bold hover:bg-[#005a50] transition-all shadow-md shadow-emerald-100"
-                >
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ContractFormModal 
+          initialData={editingContract}
+          onClose={() => setEditingContract(null)}
+          onSuccess={() => {
+            setEditingContract(null);
+            fetchContracts();
+          }}
+        />
       )}
     </div>
   );

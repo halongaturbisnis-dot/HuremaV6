@@ -184,17 +184,28 @@ export const contractService = {
       'Keterangan'
     ];
     wsImport.addRow(headers);
-    
-    // Style headers: Bold and Red for mandatory columns
-    const headerRow = wsImport.getRow(1);
-    headerRow.font = { bold: true };
-    
-    // Mandatory columns: D (No Kontrak), E (Jenis), F (Mulai), G (Akhir)
-    [4, 5, 6, 7].forEach(colIdx => {
-      const cell = headerRow.getCell(colIdx);
-      cell.font = { color: { argb: 'FFFF0000' }, bold: true };
-    });
 
+    // Add Description Row (Row 2)
+    const descriptionRow = [
+      'Jangan diubah', 'Referensi', 'Referensi', 'Wajib diisi',
+      'Pilih dari daftar', 'Format: YYYY-MM-DD', 'Format: YYYY-MM-DD', 'Opsional'
+    ];
+    wsImport.addRow(descriptionRow);
+
+    // Add Example Row (Row 3)
+    const exampleRow = [
+      'ID_AKUN', 
+      'NIK001', 
+      'Contoh Nama', 
+      'KONTRAK/2024/001',
+      'PKWT', 
+      new Date().toISOString().split('T')[0], 
+      new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0], 
+      'Perpanjangan Kontrak'
+    ];
+    wsImport.addRow(exampleRow);
+    
+    // Add All Accounts (Row 4 onwards)
     accounts.forEach(acc => {
       wsImport.addRow([
         acc.id,
@@ -204,25 +215,38 @@ export const contractService = {
       ]);
     });
 
+    // Style headers
+    const headerRow = wsImport.getRow(1);
+    headerRow.eachCell((cell) => {
+      const isMandatory = cell.value?.toString().includes('(*)');
+      cell.font = { 
+        bold: true, 
+        color: { argb: isMandatory ? 'FFFF0000' : 'FF000000' } 
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+    });
+
+    // Style description row
+    const descRow = wsImport.getRow(2);
+    descRow.font = { italic: true, size: 10 };
+    descRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFF9C4' } // Light yellow
+    };
+
     const contractTypes = ['PKWT', 'PKWTT', 'Magang', 'Harian', 'Addendum'];
-    const maxRow = wsImport.rowCount + 500;
-    for (let i = 2; i <= maxRow; i++) {
+    const totalRows = 3 + accounts.length;
+    for (let i = 4; i <= totalRows; i++) {
       wsImport.getCell(`E${i}`).dataValidation = {
         type: 'list',
         allowBlank: true,
         formulae: [`"${contractTypes.join(',')}"`]
       };
-      
-      ['F', 'G'].forEach(col => {
-        const cell = wsImport.getCell(`${col}${i}`);
-        cell.dataValidation = {
-          type: 'date',
-          operator: 'greaterThan',
-          allowBlank: true,
-          formulae: [new Date(1900, 0, 1)]
-        };
-        cell.numFmt = 'yyyy-mm-dd';
-      });
     }
 
     wsImport.columns.forEach((col, idx) => {
@@ -244,44 +268,82 @@ export const contractService = {
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
-          const results = jsonData.map((row: any) => {
-            const parseDate = (val: any) => {
-              if (typeof val === 'number') {
-                const date = new Date((val - 25569) * 86400 * 1000);
-                return date.toISOString().split('T')[0];
+          const results = jsonData
+            .filter((row: any) => {
+              const accountId = String(row['Account ID (Hidden)'] || '').trim();
+              const contractNumber = String(row['Nomor Kontrak (*)'] || '').trim();
+              return accountId !== '' && accountId !== 'ID_AKUN' && accountId !== 'Jangan diubah' && contractNumber !== '';
+            })
+            .map((row: any) => {
+              const formatExcelDate = (val: any) => {
+                if (!val) return null;
+                if (typeof val === 'number') {
+                  const date = new Date((val - 25569) * 86400 * 1000);
+                  if (isNaN(date.getTime())) return null;
+                  return date.toISOString().split('T')[0];
+                }
+                const str = String(val).trim();
+                if (!str) return null;
+
+                // Handle DD/MM/YYYY or DD-MM-YYYY format
+                const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (ddmmyyyy) {
+                  const day = ddmmyyyy[1].padStart(2, '0');
+                  const month = ddmmyyyy[2].padStart(2, '0');
+                  const year = ddmmyyyy[3];
+                  return `${year}-${month}-${day}`;
+                }
+
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                const parsed = new Date(str);
+                if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+                return str;
+              };
+
+              const contractNumber = String(row['Nomor Kontrak (*)'] || '').trim();
+
+              // Smart matching logic
+              let matchedFileId = null;
+              if (contractNumber) {
+                const normalizedNo = contractNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                Object.entries(bulkFiles).forEach(([fileName, fileId]) => {
+                  const normalizedFileName = fileName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                  if (normalizedFileName === normalizedNo) matchedFileId = fileId;
+                });
               }
-              return val;
-            };
 
-            const startDate = parseDate(row['Tgl Mulai (YYYY-MM-DD) (*)']);
-            const endDate = parseDate(row['Tgl Akhir (YYYY-MM-DD) (*)']);
-            const contractNumber = row['Nomor Kontrak (*)'] || '';
+              const requiredFields = [
+                'Account ID (Hidden)', 'Nomor Kontrak (*)', 'Jenis Kontrak (*)', 
+                'Tgl Mulai (YYYY-MM-DD) (*)'
+              ];
 
-            // Smart matching logic
-            let matchedFileId = null;
-            if (contractNumber) {
-              const normalizedNo = String(contractNumber).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-              // Try to find in bulkFiles
-              const match = Object.entries(bulkFiles).find(([fileName]) => {
-                const normalizedFileName = fileName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                return normalizedFileName === normalizedNo;
+              let errorMsg = '';
+              const missingFields = requiredFields.filter(field => {
+                const val = row[field];
+                return val === undefined || val === null || String(val).trim() === '';
               });
-              if (match) matchedFileId = match[1];
-            }
 
-            return {
-              account_id: row['Account ID (Hidden)'],
-              full_name: row['Nama Karyawan'],
-              internal_nik: row['NIK Internal'],
-              contract_number: contractNumber,
-              contract_type: row['Jenis Kontrak (*)'],
-              start_date: startDate,
-              end_date: endDate || null,
-              notes: row['Keterangan'] || null,
-              file_id: matchedFileId,
-              isValid: !!(row['Account ID (Hidden)'] && contractNumber && startDate)
-            };
-          });
+              if (missingFields.length > 0) {
+                const cleanNames = missingFields.map(f => f.replace(' (*)', '').replace(' (YYYY-MM-DD)', ''));
+                errorMsg = `Kolom wajib belum lengkap: [${cleanNames.join(', ')}]`;
+              }
+
+              const isValid = !errorMsg;
+
+              return {
+                account_id: row['Account ID (Hidden)'],
+                full_name: row['Nama Karyawan'],
+                internal_nik: row['NIK Internal'],
+                contract_number: contractNumber,
+                contract_type: row['Jenis Kontrak (*)'],
+                start_date: formatExcelDate(row['Tgl Mulai (YYYY-MM-DD) (*)']),
+                end_date: formatExcelDate(row['Tgl Akhir (YYYY-MM-DD) (*)']),
+                notes: row['Keterangan'] || null,
+                file_id: matchedFileId,
+                isValid,
+                errorMsg
+              };
+            });
           resolve(results);
         } catch (err) { reject(err); }
       };
