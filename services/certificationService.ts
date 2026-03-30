@@ -106,6 +106,35 @@ export const certificationService = {
     const workbook = new ExcelJS.Workbook();
     const ws = workbook.addWorksheet('Certification_Import');
     
+    // Baris 1: Instruksi
+    const instructions = [
+      'INSTRUKSI PENGISIAN:',
+      '1. Kolom berlabel (*) wajib diisi.',
+      '2. Format Tanggal harus YYYY-MM-DD (Contoh: 2024-01-01).',
+      '3. Jangan mengubah kolom Account ID (Hidden) dan NIK Internal.',
+      '4. Data dimulai dari baris ke-4.'
+    ];
+    ws.addRow([instructions.join(' ')]);
+    ws.mergeCells(1, 1, 1, 8);
+    ws.getRow(1).height = 30;
+    ws.getRow(1).alignment = { vertical: 'middle', wrapText: true };
+    ws.getRow(1).font = { italic: true, size: 9, color: { argb: 'FF666666' } };
+
+    // Baris 2: Contoh
+    const example = [
+      'CONTOH_ID',
+      'NIK_CONTOH',
+      'NAMA_CONTOH',
+      'Teknis',
+      'Sertifikasi K3 Umum',
+      '2024-03-30',
+      'Contoh pengisian data',
+      ''
+    ];
+    ws.addRow(example);
+    ws.getRow(2).font = { italic: true, color: { argb: 'FF999999' } };
+
+    // Baris 3: Header
     const headers = [
       'Account ID (Hidden)', 
       'NIK Internal', 
@@ -117,14 +146,20 @@ export const certificationService = {
       'Link File G-Drive (Opsional)'
     ];
     ws.addRow(headers);
-    ws.getRow(1).font = { bold: true };
+    ws.getRow(3).font = { bold: true };
+    ws.getRow(3).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    };
 
+    // Data mulai baris 4
     accounts.forEach(acc => {
       ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '', '']);
     });
 
     const maxRow = ws.rowCount + 500;
-    for (let i = 2; i <= maxRow; i++) {
+    for (let i = 4; i <= maxRow; i++) {
       const dateCell = ws.getCell(`F${i}`);
       dateCell.dataValidation = {
         type: 'date',
@@ -150,7 +185,7 @@ export const certificationService = {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { range: 2 });
 
           const results = jsonData.map((row: any) => {
             const parseDate = (val: any) => {

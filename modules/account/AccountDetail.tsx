@@ -19,7 +19,7 @@ import TerminationForm from '../discipline/TerminationForm';
 import ContractDetailModal from '../contract/ContractDetailModal';
 import CareerDetailModal from './CareerDetailModal';
 import HealthDetailModal from './HealthDetailModal';
-import CertificationDetailModal from './CertificationDetailModal';
+import CertificationDetailModal from '../certification/CertificationDetailModal';
 import WarningDetailModal from './WarningDetailModal';
 import TerminationDetailModal from './TerminationDetailModal';
 

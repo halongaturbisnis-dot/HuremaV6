@@ -7,6 +7,8 @@ import { googleDriveService } from '../../services/googleDriveService';
 import { AccountCertificationExtended } from '../../types';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
 import CertificationImportModal from './CertificationImportModal';
+import CertificationDetailModal from './CertificationDetailModal';
+import CertificationFormModal from './CertificationFormModal';
 
 const CertificationMain: React.FC = () => {
   const [certs, setCerts] = useState<AccountCertificationExtended[]>([]);
@@ -17,6 +19,9 @@ const CertificationMain: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedCert, setSelectedCert] = useState<AccountCertificationExtended | null>(null);
   const [editingCert, setEditingCert] = useState<AccountCertificationExtended | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'this_month'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   useEffect(() => {
     fetchCerts();
@@ -54,8 +59,20 @@ const CertificationMain: React.FC = () => {
 
   const filteredCerts = certs.filter(c => {
     const searchStr = `${c.account?.full_name} ${c.account?.internal_nik} ${c.cert_name} ${c.cert_type}`.toLowerCase();
-    return searchStr.includes(searchTerm.toLowerCase());
+    const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+    
+    if (filterType === 'this_month') {
+      const inputDate = new Date(c.entry_date);
+      const now = new Date();
+      const matchesMonth = inputDate.getMonth() === now.getMonth() && inputDate.getFullYear() === now.getFullYear();
+      return matchesSearch && matchesMonth;
+    }
+    
+    return matchesSearch;
   });
+
+  const totalPages = Math.ceil(filteredCerts.length / itemsPerPage);
+  const paginatedCerts = filteredCerts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
@@ -142,14 +159,20 @@ const CertificationMain: React.FC = () => {
       {uploadingId && <LoadingSpinner message="Mengunggah Dokumen..." />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white border border-gray-100 p-4 rounded-md shadow-sm flex items-center gap-4">
+        <div 
+          onClick={() => setFilterType('all')}
+          className={`bg-white border p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all ${filterType === 'all' ? 'border-[#006E62] ring-1 ring-[#006E62]' : 'border-gray-100 hover:border-gray-300'}`}
+        >
           <div className="p-3 bg-emerald-50 rounded-md text-[#006E62]"><Award size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Sertifikasi Terdata</p>
             <p className="text-xl font-bold text-gray-800">{certs.length}</p>
           </div>
         </div>
-        <div className="bg-white border border-gray-100 p-4 rounded-md shadow-sm flex items-center gap-4">
+        <div 
+          onClick={() => setFilterType('this_month')}
+          className={`bg-white border p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all ${filterType === 'this_month' ? 'border-blue-600 ring-1 ring-blue-600' : 'border-gray-100 hover:border-gray-300'}`}
+        >
           <div className="p-3 bg-blue-50 rounded-md text-blue-600"><Calendar size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Input Bulan Ini</p>
@@ -209,17 +232,16 @@ const CertificationMain: React.FC = () => {
               <th className="px-6 py-4">Karyawan</th>
               <th className="px-6 py-4">Sertifikasi</th>
               <th className="px-6 py-4">Tanggal</th>
-              <th className="px-6 py-4">Dokumen</th>
               <th className="px-6 py-4 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
-              <tr><td colSpan={6} className="text-center py-20 text-gray-400">Memuat data sertifikasi...</td></tr>
-            ) : filteredCerts.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-20 text-gray-400">Tidak ada data sertifikasi ditemukan.</td></tr>
+              <tr><td colSpan={5} className="text-center py-20 text-gray-400">Memuat data sertifikasi...</td></tr>
+            ) : paginatedCerts.length === 0 ? (
+              <tr><td colSpan={5} className="text-center py-20 text-gray-400">Tidak ada data sertifikasi ditemukan.</td></tr>
             ) : (
-              filteredCerts.map(c => {
+              paginatedCerts.map(c => {
                 const isSelected = selectedIds.includes(c.id);
                 return (
                   <tr 
@@ -263,23 +285,6 @@ const CertificationMain: React.FC = () => {
                       <div className="text-xs text-gray-600 font-medium">{formatDate(c.cert_date)}</div>
                       <div className="text-[9px] text-gray-400 uppercase font-bold">Entry: {formatDate(c.entry_date)}</div>
                     </td>
-                    <td className="px-6 py-4">
-                      {c.file_id ? (
-                        <a 
-                          href={googleDriveService.getFileUrl(c.file_id).replace('=s1600', '=s0')} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#006E62] bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition-colors"
-                        >
-                          <Paperclip size={12} /> LIHAT FILE
-                        </a>
-                      ) : (
-                        <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded cursor-pointer hover:bg-orange-100 transition-colors">
-                          <Upload size={12} /> UPLOAD
-                          <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleManualUpload(e, c)} />
-                        </label>
-                      )}
-                    </td>
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">
                         <button 
@@ -306,6 +311,42 @@ const CertificationMain: React.FC = () => {
         </table>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white px-6 py-4 border border-gray-100 rounded-md shadow-sm">
+          <div className="text-xs text-gray-500">
+            Menampilkan <span className="font-bold text-gray-700">{((currentPage - 1) * itemsPerPage) + 1}</span> sampai <span className="font-bold text-gray-700">{Math.min(currentPage * itemsPerPage, filteredCerts.length)}</span> dari <span className="font-bold text-gray-700">{filteredCerts.length}</span> data
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-gray-200 rounded text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Sebelumnya
+            </button>
+            <div className="flex items-center gap-1">
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`w-8 h-8 rounded text-xs font-bold transition-all ${currentPage === i + 1 ? 'bg-[#006E62] text-white shadow-md shadow-emerald-100' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border border-gray-200 rounded text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Selanjutnya
+            </button>
+          </div>
+        </div>
+      )}
+
       {showImportModal && (
         <CertificationImportModal 
           onClose={() => setShowImportModal(false)} 
@@ -313,206 +354,26 @@ const CertificationMain: React.FC = () => {
         />
       )}
 
-      {/* Detail Modal */}
       {selectedCert && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-2 text-[#006E62]">
-                <Info size={20} />
-                <h3 className="font-bold text-gray-800">Detail Sertifikasi</h3>
-              </div>
-              <button onClick={() => setSelectedCert(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="flex items-center gap-4 p-4 bg-emerald-50/30 rounded-lg border border-emerald-100/50">
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 text-gray-400 shadow-sm overflow-hidden">
-                  {selectedCert.account?.photo_google_id ? (
-                    <img 
-                      src={googleDriveService.getFileUrl(selectedCert.account.photo_google_id)} 
-                      alt="" 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <UserCircle size={32} />
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900">{selectedCert.account?.full_name}</h4>
-                  <p className="text-xs font-mono text-gray-500 uppercase tracking-wider">{selectedCert.account?.internal_nik}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nama Sertifikasi</p>
-                  <p className="text-sm font-bold text-[#006E62]">{selectedCert.cert_name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jenis Sertifikasi</p>
-                  <p className="text-sm font-bold text-gray-800">{selectedCert.cert_type}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal Sertifikasi</p>
-                  <p className="text-sm font-medium text-gray-700">{formatDate(selectedCert.cert_date)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal Input</p>
-                  <p className="text-sm font-bold text-gray-700">{formatDate(selectedCert.entry_date)}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-4 border-t border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Catatan / Keterangan</p>
-                <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
-                  {selectedCert.notes || 'Tidak ada catatan.'}
-                </p>
-              </div>
-
-              {selectedCert.file_id && (
-                <div className="pt-4">
-                  <a 
-                    href={googleDriveService.getFileUrl(selectedCert.file_id).replace('=s1600', '=s0')}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-50 text-[#006E62] rounded-lg font-bold text-sm hover:bg-emerald-100 transition-all border border-emerald-200"
-                  >
-                    <Paperclip size={18} /> LIHAT DOKUMEN SERTIFIKAT
-                  </a>
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
-              <button 
-                onClick={() => setSelectedCert(null)}
-                className="px-6 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        <CertificationDetailModal 
+          cert={selectedCert}
+          onClose={() => setSelectedCert(null)}
+          onEdit={() => {
+            setEditingCert(selectedCert);
+            setSelectedCert(null);
+          }}
+        />
       )}
 
-      {/* Edit Modal */}
       {editingCert && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-2 text-[#006E62]">
-                <Edit2 size={20} />
-                <h3 className="font-bold text-gray-800">Edit Sertifikasi</h3>
-              </div>
-              <button onClick={() => setEditingCert(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const file = (formData.get('file_sertifikat') as File);
-              
-              const data: any = {
-                cert_name: formData.get('cert_name') as string,
-                cert_type: formData.get('cert_type') as string,
-                cert_date: formData.get('cert_date') as string,
-                notes: formData.get('notes') as string,
-              };
-              
-              try {
-                setIsLoading(true);
-                
-                if (file && file.size > 0) {
-                  if (editingCert.file_id) {
-                    await googleDriveService.deleteFile(editingCert.file_id);
-                  }
-                  const newFileId = await googleDriveService.uploadFile(file);
-                  data.file_id = newFileId;
-                }
-
-                await certificationService.update(editingCert.id, data);
-                setCerts(prev => prev.map(c => c.id === editingCert.id ? { ...c, ...data } : c));
-                setEditingCert(null);
-                Swal.fire({ title: 'Berhasil!', text: 'Data sertifikasi telah diperbarui.', icon: 'success', timer: 1500, showConfirmButton: false });
-              } catch (error) {
-                Swal.fire('Gagal', 'Gagal memperbarui data sertifikasi', 'error');
-              } finally {
-                setIsLoading(false);
-              }
-            }} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nama Sertifikasi</label>
-                <input 
-                  name="cert_name"
-                  defaultValue={editingCert.cert_name}
-                  required
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jenis Sertifikasi</label>
-                <select 
-                  name="cert_type"
-                  defaultValue={editingCert.cert_type}
-                  required
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                >
-                  <option value="Internal">Internal</option>
-                  <option value="Eksternal">Eksternal</option>
-                  <option value="Lisensi">Lisensi</option>
-                  <option value="Lainnya">Lainnya</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal Sertifikasi</label>
-                <input 
-                  type="date"
-                  name="cert_date"
-                  defaultValue={editingCert.cert_date}
-                  required
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Catatan</label>
-                <textarea 
-                  name="notes"
-                  defaultValue={editingCert.notes || ''}
-                  rows={3}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium resize-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ganti Dokumen Sertifikat (Opsional)</label>
-                <input 
-                  type="file"
-                  name="file_sertifikat"
-                  accept="image/*,application/pdf"
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm font-medium"
-                />
-                {editingCert.file_id && <p className="text-[10px] text-orange-500 font-medium italic">* Mengunggah file baru akan menghapus file lama.</p>}
-              </div>
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setEditingCert(null)}
-                  className="flex-1 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all"
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 py-2.5 bg-[#006E62] text-white rounded-lg text-sm font-bold hover:bg-[#005a50] transition-all shadow-md shadow-emerald-100"
-                >
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CertificationFormModal 
+          initialData={editingCert}
+          onClose={() => setEditingCert(null)}
+          onSuccess={() => {
+            setEditingCert(null);
+            fetchCerts();
+          }}
+        />
       )}
     </div>
   );
