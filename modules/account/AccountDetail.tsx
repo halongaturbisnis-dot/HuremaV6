@@ -618,7 +618,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
 
         {/* i. Riwayat Kesehatan */}
         <DetailSection 
-          icon={Heart} 
+          icon={Activity} 
           title="Riwayat Kesehatan" 
           onAdd={() => setShowLogForm({ type: 'health', data: { account_id: id } })}
           isScrollable

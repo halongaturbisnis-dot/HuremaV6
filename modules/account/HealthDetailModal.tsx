@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { X, Heart, FileText, Paperclip, ExternalLink, Calendar, ShieldCheck, Edit2 } from 'lucide-react';
+import { X, Activity, FileText, Paperclip, ExternalLink, Calendar, Edit2 } from 'lucide-react';
 import { HealthLog } from '../../types';
 import { googleDriveService } from '../../services/googleDriveService';
 
@@ -48,15 +48,15 @@ const HealthDetailModal: React.FC<HealthDetailModalProps> = ({ log, onClose, onE
             <div className="space-y-4">
               <div className="bg-white p-4 rounded border border-gray-100 shadow-sm">
                 <div className="flex items-center gap-2 mb-1">
-                  <ShieldCheck size={14} className="text-[#006E62]" />
-                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status MCU</p>
+                  <Activity size={14} className="text-[#006E62]" />
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status Medis</p>
                 </div>
                 <p className="text-sm font-bold text-gray-700">{log.mcu_status}</p>
               </div>
               <div className="bg-white p-4 rounded border border-gray-100 shadow-sm">
                 <div className="flex items-center gap-2 mb-1">
-                  <Heart size={14} className="text-[#006E62]" />
-                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resiko Kesehatan</p>
+                  <Activity size={14} className="text-[#006E62]" />
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Risiko Kesehatan</p>
                 </div>
                 <p className="text-sm font-bold text-gray-700">{log.health_risk}</p>
               </div>

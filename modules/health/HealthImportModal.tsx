@@ -28,7 +28,7 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
       
       const uploadPromises = Array.from(files).map(async (f) => {
         const file = f as File;
-        const fileId = await googleDriveService.uploadFile(file);
+        const fileId = await googleDriveService.uploadFile(file, 'MCU_KARYAWAN');
         const fileName = file.name.split('.').slice(0, -1).join('.');
         newFiles.push({ name: fileName, id: fileId });
       });
@@ -38,24 +38,23 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
       const updatedFileList = [...fileList, ...newFiles];
       setFileList(updatedFileList);
       
-      const mapping: Record<string, string> = {};
-      updatedFileList.forEach(f => mapping[f.name] = f.id);
-      setBulkFiles(mapping);
-
-      // Update preview data with new attachments
+      // Update preview data with smart matching
       setPreviewData(prev => prev.map(row => {
-        const docNumber = row.doc_number || '';
-        if (!docNumber) return row;
-        
-        const normalizedNo = String(docNumber).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        const match = updatedFileList.find(f => {
+        const normalizedName = (row.full_name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const normalizedDate = (row.change_date || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const target = normalizedName + normalizedDate;
+
+        const matches = updatedFileList.filter(f => {
           const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-          return normalizedFileName === normalizedNo;
+          return normalizedFileName.includes(target) || target.includes(normalizedFileName) || 
+                 (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate));
         });
 
         return {
           ...row,
-          file_mcu_id: match ? match.id : row.file_mcu_id
+          file_mcu_id: matches.length > 0 ? matches[0].id : null,
+          matched_filename: matches.length > 0 ? matches[0].name : null,
+          hasConflict: matches.length > 1
         };
       }));
       
@@ -74,28 +73,27 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
     }
   };
 
-  const handleDeleteFile = (fileName: string) => {
-    const updatedFileList = fileList.filter(f => f.name !== fileName);
+  const handleDeleteFile = (fileId: string) => {
+    const updatedFileList = fileList.filter(f => f.id !== fileId);
     setFileList(updatedFileList);
     
-    const mapping: Record<string, string> = {};
-    updatedFileList.forEach(f => mapping[f.name] = f.id);
-    setBulkFiles(mapping);
-
-    // Update preview data (remove matched ID if file deleted)
+    // Re-run matching for all rows
     setPreviewData(prev => prev.map(row => {
-      const docNumber = row.doc_number || '';
-      if (!docNumber) return row;
-      
-      const normalizedNo = String(docNumber).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      const stillExists = updatedFileList.some(f => {
+      const normalizedName = (row.full_name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const normalizedDate = (row.change_date || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const target = normalizedName + normalizedDate;
+
+      const matches = updatedFileList.filter(f => {
         const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        return normalizedFileName === normalizedNo;
+        return normalizedFileName.includes(target) || target.includes(normalizedFileName) || 
+               (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate));
       });
 
       return {
         ...row,
-        file_mcu_id: stillExists ? row.file_mcu_id : null
+        file_mcu_id: matches.length > 0 ? matches[0].id : null,
+        matched_filename: matches.length > 0 ? matches[0].name : null,
+        hasConflict: matches.length > 1
       };
     }));
   };
@@ -106,8 +104,29 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
 
     try {
       setIsProcessing(true);
-      const results = await healthService.processImport(file, bulkFiles) as any[];
-      setPreviewData(results);
+      const results = await healthService.processImport(file) as any[];
+      
+      // Initial matching with existing fileList
+      const matchedResults = results.map(row => {
+        const normalizedName = (row.full_name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const normalizedDate = (row.change_date || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const target = normalizedName + normalizedDate;
+
+        const matches = fileList.filter(f => {
+          const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          return normalizedFileName.includes(target) || target.includes(normalizedFileName) || 
+                 (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate));
+        });
+
+        return {
+          ...row,
+          file_mcu_id: matches.length > 0 ? matches[0].id : null,
+          matched_filename: matches.length > 0 ? matches[0].name : null,
+          hasConflict: matches.length > 1
+        };
+      });
+
+      setPreviewData(matchedResults);
     } catch (error) {
       Swal.fire('Gagal', 'Format file tidak didukung atau rusak.', 'error');
     } finally {
@@ -201,8 +220,7 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
                         <tr>
                           <th className="px-4 py-2">Status</th>
                           <th className="px-4 py-2">Nama Karyawan</th>
-                          <th className="px-4 py-2">Nomor Dokumen</th>
-                          <th className="px-4 py-2">Status MCU</th>
+                          <th className="px-4 py-2">Status Medis</th>
                           <th className="px-4 py-2">Risiko</th>
                           <th className="px-4 py-2">Tgl Pemeriksaan</th>
                         </tr>
@@ -218,7 +236,6 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
                               )}
                             </td>
                             <td className="px-4 py-2 font-bold">{row.full_name}</td>
-                            <td className="px-4 py-2">{row.doc_number}</td>
                             <td className="px-4 py-2 uppercase font-bold text-[#006E62]">{row.mcu_status}</td>
                             <td className="px-4 py-2">
                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
@@ -244,7 +261,7 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
                 </div>
                 <div className="text-center max-w-md">
                   <h4 className="text-lg font-bold text-gray-800">2. Unggah Lampiran Hasil MCU (Opsional)</h4>
-                  <p className="text-xs text-gray-500 mt-2">Unggah file PDF/Gambar hasil pemeriksaan. Sistem akan mencocokkan nama file dengan Nomor Dokumen di Excel secara otomatis.</p>
+                  <p className="text-xs text-gray-500 mt-2">Unggah file PDF/Gambar hasil pemeriksaan. Sistem akan mencocokkan nama file dengan Nama Karyawan + Tanggal di Excel secara otomatis.</p>
                 </div>
 
                 <div className="mt-6 w-full max-w-md">
@@ -270,7 +287,7 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
                             <span className="text-[10px] font-medium text-gray-600 truncate">{file.name}</span>
                           </div>
                           <button 
-                            onClick={() => handleDeleteFile(file.name)}
+                            onClick={() => handleDeleteFile(file.id)}
                             className="text-red-400 hover:text-red-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X size={12} />
@@ -288,7 +305,7 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
                       <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
                         <tr>
                           <th className="px-3 py-2">Nama Karyawan</th>
-                          <th className="px-3 py-2">Nomor Dokumen</th>
+                          <th className="px-3 py-2">Tgl Periksa</th>
                           <th className="px-3 py-2">Status Lampiran</th>
                         </tr>
                       </thead>
@@ -296,14 +313,22 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
                         {previewData.map((row, idx) => (
                           <tr key={idx}>
                             <td className="px-3 py-2 font-medium">{row.full_name}</td>
-                            <td className="px-3 py-2 font-mono">{row.doc_number}</td>
+                            <td className="px-3 py-2 font-mono">{row.change_date}</td>
                             <td className="px-3 py-2">
                               {row.file_mcu_id ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                                  <CheckCircle size={10} /> TERPASANG
-                                </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded w-fit">
+                                    <CheckCircle size={10} /> TERPASANG
+                                  </span>
+                                  <span className="text-[8px] text-gray-400 truncate max-w-[150px]">{row.matched_filename}</span>
+                                  {row.hasConflict && (
+                                    <div className="flex items-center gap-1 text-[8px] text-orange-500 font-bold">
+                                      <AlertTriangle size={8} /> Konflik Nama File
+                                    </div>
+                                  )}
+                                </div>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-gray-400 italic bg-gray-100 px-2 py-0.5 rounded">
+                                <span className="inline-flex items-center gap-1 text-gray-400 italic bg-gray-100 px-2 py-0.5 rounded w-fit">
                                   TIDAK ADA
                                 </span>
                               )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Upload, FileText, Paperclip, ChevronDown, Calendar, CalendarClock, ExternalLink } from 'lucide-react';
+import { X, Save, Upload, FileText, Paperclip, ChevronDown, Calendar, CalendarClock, ExternalLink, Activity } from 'lucide-react';
 import { locationService } from '../../services/locationService';
 import { googleDriveService } from '../../services/googleDriveService';
 import { accountService } from '../../services/accountService';
@@ -362,23 +362,24 @@ const LogForm: React.FC<LogFormProps> = ({ type, accountId, initialData, isEdit 
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label htmlFor="mcu_status" className="text-[9px] font-bold text-gray-500 uppercase">Status Medis / MCU</label>
+                  <label htmlFor="mcu_status" className="text-[9px] font-bold text-gray-500 uppercase">Status Medis</label>
                   <select id="mcu_status" required name="mcu_status" value={formData.mcu_status} onChange={handleChange} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded outline-none focus:ring-1 focus:ring-[#006E62] bg-white">
                     <option value="">-- Pilih Status --</option>
-                    <option value="FIT">FIT</option>
-                    <option value="FIT WITH NOTE">FIT WITH NOTE</option>
-                    <option value="UNFIT">UNFIT</option>
-                    <option value="PENDING">PENDING</option>
+                    <option value="Sehat">Sehat</option>
+                    <option value="Fit dengan Catatan">Fit dengan Catatan</option>
+                    <option value="Unfit">Unfit</option>
+                    <option value="Menunggu Hasil">Menunggu Hasil</option>
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="health_risk" className="text-[9px] font-bold text-gray-500 uppercase">Risiko Kesehatan</label>
                   <select id="health_risk" required name="health_risk" value={formData.health_risk} onChange={handleChange} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded outline-none focus:ring-1 focus:ring-[#006E62] bg-white">
                     <option value="">-- Pilih Risiko --</option>
-                    <option value="LOW">LOW</option>
-                    <option value="MEDIUM">MEDIUM</option>
-                    <option value="HIGH">HIGH</option>
-                    <option value="VERY HIGH">VERY HIGH</option>
+                    <option value="Tidak ada risiko kerja">Tidak ada risiko kerja</option>
+                    <option value="Risiko Rendah">Risiko Rendah</option>
+                    <option value="Risiko Sedang">Risiko Sedang</option>
+                    <option value="Risiko Tinggi">Risiko Tinggi</option>
+                    <option value="Risiko Sangat Tinggi">Risiko Sangat Tinggi</option>
                   </select>
                 </div>
               </div>
