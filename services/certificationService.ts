@@ -106,35 +106,6 @@ export const certificationService = {
     const workbook = new ExcelJS.Workbook();
     const ws = workbook.addWorksheet('Certification_Import');
     
-    // Baris 1: Instruksi
-    const instructions = [
-      'INSTRUKSI PENGISIAN:',
-      '1. Kolom berlabel (*) wajib diisi.',
-      '2. Format Tanggal harus YYYY-MM-DD (Contoh: 2024-01-01).',
-      '3. Jangan mengubah kolom Account ID (Hidden) dan NIK Internal.',
-      '4. Data dimulai dari baris ke-4.'
-    ];
-    ws.addRow([instructions.join(' ')]);
-    ws.mergeCells(1, 1, 1, 8);
-    ws.getRow(1).height = 30;
-    ws.getRow(1).alignment = { vertical: 'middle', wrapText: true };
-    ws.getRow(1).font = { italic: true, size: 9, color: { argb: 'FF666666' } };
-
-    // Baris 2: Contoh
-    const example = [
-      'CONTOH_ID',
-      'NIK_CONTOH',
-      'NAMA_CONTOH',
-      'Teknis',
-      'Sertifikasi K3 Umum',
-      '2024-03-30',
-      'Contoh pengisian data',
-      ''
-    ];
-    ws.addRow(example);
-    ws.getRow(2).font = { italic: true, color: { argb: 'FF999999' } };
-
-    // Baris 3: Header
     const headers = [
       'Account ID (Hidden)', 
       'NIK Internal', 
@@ -142,24 +113,65 @@ export const certificationService = {
       'Jenis Sertifikasi (*)', 
       'Nama Sertifikasi (*)', 
       'Tanggal Sertifikasi (YYYY-MM-DD) (*)', 
-      'Keterangan',
-      'Link File G-Drive (Opsional)'
+      'Keterangan'
     ];
     ws.addRow(headers);
-    ws.getRow(3).font = { bold: true };
-    ws.getRow(3).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' }
-    };
 
-    // Data mulai baris 4
+    // Add Description Row (Row 2)
+    const descriptionRow = [
+      'Jangan diubah', 'Referensi', 'Referensi', 'Wajib diisi',
+      'Wajib diisi', 'Format: YYYY-MM-DD', 'Opsional'
+    ];
+    ws.addRow(descriptionRow);
+
+    // Add Example Row (Row 3)
+    const exampleRow = [
+      'ID_AKUN', 
+      'NIK001', 
+      'Contoh Nama', 
+      'Teknis', 
+      'Sertifikasi K3 Umum', 
+      new Date().toISOString().split('T')[0], 
+      'Contoh pengisian data'
+    ];
+    ws.addRow(exampleRow);
+    
+    // Add All Accounts (Row 4 onwards)
     accounts.forEach(acc => {
-      ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '', '']);
+      ws.addRow([
+        acc.id,
+        acc.internal_nik,
+        acc.full_name,
+        '', '', '', ''
+      ]);
     });
 
-    const maxRow = ws.rowCount + 500;
-    for (let i = 4; i <= maxRow; i++) {
+    // Style headers
+    const headerRow = ws.getRow(1);
+    headerRow.eachCell((cell) => {
+      const isMandatory = cell.value?.toString().includes('(*)');
+      cell.font = { 
+        bold: true, 
+        color: { argb: isMandatory ? 'FFFF0000' : 'FF000000' } 
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+    });
+
+    // Style description row
+    const descRow = ws.getRow(2);
+    descRow.font = { italic: true, size: 10 };
+    descRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFF9C4' } // Light yellow
+    };
+
+    const totalRows = 3 + accounts.length;
+    for (let i = 4; i <= totalRows; i++) {
       const dateCell = ws.getCell(`F${i}`);
       dateCell.dataValidation = {
         type: 'date',
@@ -171,45 +183,87 @@ export const certificationService = {
     }
 
     ws.columns.forEach((col, idx) => {
-      col.width = [20, 15, 25, 20, 25, 25, 25, 25][idx];
+      col.width = [20, 15, 25, 20, 25, 25, 25][idx];
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `HUREMA_Certification_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const dataBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(dataBlob, `HUREMA_Certification_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
   },
 
   async processImport(file: File) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { range: 2 });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
-          const results = jsonData.map((row: any) => {
-            const parseDate = (val: any) => {
-              if (typeof val === 'number') {
-                const date = new Date((val - 25569) * 86400 * 1000);
-                return date.toISOString().split('T')[0];
+          const results = jsonData
+            .filter((row: any) => {
+              const accountId = String(row['Account ID (Hidden)'] || '').trim();
+              const certName = String(row['Nama Sertifikasi (*)'] || '').trim();
+              return accountId !== '' && accountId !== 'ID_AKUN' && accountId !== 'Jangan diubah' && certName !== '';
+            })
+            .map((row: any) => {
+              const formatExcelDate = (val: any) => {
+                if (!val) return null;
+                if (typeof val === 'number') {
+                  const date = new Date((val - 25569) * 86400 * 1000);
+                  if (isNaN(date.getTime())) return null;
+                  return date.toISOString().split('T')[0];
+                }
+                const str = String(val).trim();
+                if (!str) return null;
+
+                // Handle DD/MM/YYYY or DD-MM-YYYY format
+                const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (ddmmyyyy) {
+                  const day = ddmmyyyy[1].padStart(2, '0');
+                  const month = ddmmyyyy[2].padStart(2, '0');
+                  const year = ddmmyyyy[3];
+                  return `${year}-${month}-${day}`;
+                }
+
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                const parsed = new Date(str);
+                if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+                return str;
+              };
+
+              const requiredFields = [
+                'Account ID (Hidden)', 'Jenis Sertifikasi (*)', 'Nama Sertifikasi (*)', 
+                'Tanggal Sertifikasi (YYYY-MM-DD) (*)'
+              ];
+
+              let errorMsg = '';
+              const missingFields = requiredFields.filter(field => {
+                const val = row[field];
+                return val === undefined || val === null || String(val).trim() === '';
+              });
+
+              if (missingFields.length > 0) {
+                const cleanNames = missingFields.map(f => f.replace(' (*)', '').replace(' (YYYY-MM-DD)', ''));
+                errorMsg = `Kolom wajib belum lengkap: [${cleanNames.join(', ')}]`;
               }
-              return val;
-            };
 
-            const certDate = parseDate(row['Tanggal Sertifikasi (YYYY-MM-DD) (*)']);
+              const isValid = !errorMsg;
 
-            return {
-              account_id: row['Account ID (Hidden)'],
-              full_name: row['Nama Karyawan'],
-              internal_nik: row['NIK Internal'],
-              cert_type: row['Jenis Sertifikasi (*)'],
-              cert_name: row['Nama Sertifikasi (*)'],
-              cert_date: certDate,
-              notes: row['Keterangan'] || null,
-              file_link: row['Link File G-Drive (Opsional)'] || null,
-              isValid: !!(row['Account ID (Hidden)'] && row['Jenis Sertifikasi (*)'] && row['Nama Sertifikasi (*)'] && certDate)
-            };
-          });
+              return {
+                account_id: row['Account ID (Hidden)'],
+                full_name: row['Nama Karyawan'],
+                internal_nik: row['NIK Internal'],
+                cert_type: row['Jenis Sertifikasi (*)'],
+                cert_name: row['Nama Sertifikasi (*)'],
+                cert_date: formatExcelDate(row['Tanggal Sertifikasi (YYYY-MM-DD) (*)']),
+                notes: row['Keterangan'] || null,
+                file_id: null, // Will be matched in modal
+                isValid,
+                errorMsg
+              };
+            });
           resolve(results);
         } catch (err) { reject(err); }
       };
@@ -221,7 +275,6 @@ export const certificationService = {
     const validData = data.filter(d => d.isValid);
     const results = [];
     for (const item of validData) {
-      const driveId = item.file_link ? item.file_link.match(/[-\w]{25,}/)?.[0] : null;
       const res = await this.create({
         account_id: item.account_id,
         entry_date: new Date().toISOString().split('T')[0],
@@ -229,7 +282,7 @@ export const certificationService = {
         cert_name: item.cert_name,
         cert_date: item.cert_date,
         notes: item.notes,
-        file_id: driveId || null
+        file_id: item.file_id || null
       });
       results.push(res);
     }

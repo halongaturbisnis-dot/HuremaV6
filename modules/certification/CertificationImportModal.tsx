@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, FileUp, Download, CheckCircle, AlertTriangle, Save, Loader2, Paperclip, Trash2, FileText, UploadCloud } from 'lucide-react';
+import { X, FileUp, Download, CheckCircle, AlertTriangle, Save, Loader2, Paperclip, Upload } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { certificationService } from '../../services/certificationService';
 import { googleDriveService } from '../../services/googleDriveService';
@@ -11,11 +11,102 @@ interface CertificationImportModalProps {
 }
 
 const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onClose, onSuccess }) => {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [previewData, setPreviewData] = useState<any[]>([]);
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [bulkFiles, setBulkFiles] = useState<Record<string, string>>({});
+  const [fileList, setFileList] = useState<{ name: string; id: string }[]>([]);
+
+  const handleBulkFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setIsUploadingAttachments(true);
+      const newFiles: { name: string; id: string }[] = [];
+      
+      const uploadPromises = Array.from(files).map(async (f) => {
+        const file = f as File;
+        const fileId = await googleDriveService.uploadFile(file);
+        const fileName = file.name.split('.').slice(0, -1).join('.');
+        newFiles.push({ name: fileName, id: fileId });
+      });
+
+      await Promise.all(uploadPromises);
+      
+      const updatedFileList = [...fileList, ...newFiles];
+      setFileList(updatedFileList);
+      
+      const mapping: Record<string, string> = {};
+      updatedFileList.forEach(f => mapping[f.name] = f.id);
+      setBulkFiles(mapping);
+
+      // Update preview data with new attachments
+      setPreviewData(prev => prev.map(row => {
+        const certName = row.cert_name || '';
+        const fullName = row.full_name || '';
+        if (!certName || !fullName) return row;
+        
+        const normalizedCert = String(certName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const normalizedName = String(fullName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        
+        const match = updatedFileList.find(f => {
+          const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          // Match if filename contains both name and cert
+          return normalizedFileName.includes(normalizedCert) && normalizedFileName.includes(normalizedName);
+        });
+
+        return {
+          ...row,
+          file_id: match ? match.id : row.file_id
+        };
+      }));
+      
+      Swal.fire({
+        title: 'Berhasil!',
+        text: `${files.length} lampiran berhasil ditambahkan.`,
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire('Gagal', 'Gagal mengunggah beberapa lampiran.', 'error');
+    } finally {
+      setIsUploadingAttachments(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleDeleteFile = (fileName: string) => {
+    const updatedFileList = fileList.filter(f => f.name !== fileName);
+    setFileList(updatedFileList);
+    
+    const mapping: Record<string, string> = {};
+    updatedFileList.forEach(f => mapping[f.name] = f.id);
+    setBulkFiles(mapping);
+
+    // Update preview data
+    setPreviewData(prev => prev.map(row => {
+      const certName = row.cert_name || '';
+      const fullName = row.full_name || '';
+      if (!certName || !fullName) return row;
+      
+      const normalizedCert = String(certName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const normalizedName = String(fullName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      
+      const stillExists = updatedFileList.some(f => {
+        const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return normalizedFileName.includes(normalizedCert) && normalizedFileName.includes(normalizedName);
+      });
+
+      return {
+        ...row,
+        file_id: stillExists ? row.file_id : null
+      };
+    }));
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -25,82 +116,43 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
       setIsProcessing(true);
       const results = await certificationService.processImport(file) as any[];
       setPreviewData(results);
-      setStep(2);
     } catch (error) {
-      Swal.fire('Gagal', 'Format file tidak didukung.', 'error');
+      Swal.fire('Gagal', 'Format file tidak didukung atau data tidak valid.', 'error');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setAttachedFiles(prev => [...prev, ...files]);
-  };
-
-  const removeFile = (index: number) => {
-    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const getMatchedFile = (certName: string, fullName: string) => {
-    return attachedFiles.find(f => {
-      const fileName = f.name.toLowerCase();
-      const certNameLower = certName.toLowerCase();
-      const fullNameLower = fullName.toLowerCase();
-      // Match if filename contains cert name OR cert name contains filename (without extension)
-      // Also check if filename contains full name for better accuracy
-      const baseFileName = fileName.split('.')[0];
-      return (fileName.includes(certNameLower) || certNameLower.includes(baseFileName)) && 
-             (fileName.includes(fullNameLower) || fullNameLower.includes(baseFileName));
-    });
-  };
-
   const handleCommit = async () => {
-    const validData = previewData.filter(d => d.isValid);
-    if (validData.length === 0) return Swal.fire('Peringatan', 'Tidak ada data valid.', 'warning');
+    const hasError = previewData.some(d => !d.isValid);
+    if (hasError) {
+      Swal.fire('Peringatan', 'Masih ada data yang error. Silakan perbaiki file Excel Anda terlebih dahulu.', 'warning');
+      return;
+    }
+
+    const validCount = previewData.length;
+    if (validCount === 0) {
+      Swal.fire('Peringatan', 'Tidak ada data untuk diimpor.', 'warning');
+      return;
+    }
 
     const confirm = await Swal.fire({
       title: 'Konfirmasi Impor',
-      text: `Impor ${validData.length} sertifikasi?`,
+      text: `Sistem akan memproses ${validCount} data sertifikasi. Lanjutkan?`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#006E62',
-      confirmButtonText: 'Ya, Impor'
+      confirmButtonText: 'Ya, Proses Sekarang'
     });
 
     if (confirm.isConfirmed) {
       try {
         setIsUploading(true);
-        
-        // Process each item
-        const finalResults = [];
-        for (const item of validData) {
-          let fileId = item.file_link ? item.file_link.match(/[-\w]{25,}/)?.[0] : null;
-          
-          // Try to match with attached files if no link provided
-          if (!fileId) {
-            const matchedFile = getMatchedFile(item.cert_name, item.full_name);
-            if (matchedFile) {
-              fileId = await googleDriveService.uploadFile(matchedFile);
-            }
-          }
-
-          const res = await certificationService.create({
-            account_id: item.account_id,
-            entry_date: new Date().toISOString().split('T')[0],
-            cert_type: item.cert_type,
-            cert_name: item.cert_name,
-            cert_date: item.cert_date,
-            notes: item.notes,
-            file_id: fileId || null
-          });
-          finalResults.push(res);
-        }
-
-        Swal.fire('Berhasil!', 'Data sertifikasi telah diimpor.', 'success');
+        await certificationService.commitImport(previewData);
+        Swal.fire('Berhasil!', 'Seluruh data sertifikasi telah diimpor.', 'success');
         onSuccess();
       } catch (error) {
-        Swal.fire('Gagal', 'Terjadi kesalahan saat mengunggah data.', 'error');
+        Swal.fire('Gagal', 'Terjadi kesalahan saat memproses data.', 'error');
       } finally {
         setIsUploading(false);
       }
@@ -109,13 +161,11 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 p-4">
-      <div className="bg-white rounded-md shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-200">
+      <div className="bg-white rounded-md shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-200">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-[#006E62]">Impor Massal Sertifikasi</h3>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-              {step === 1 ? 'Tahap 1: Unggah Excel' : step === 2 ? 'Tahap 1: Pratinjau Data' : 'Tahap 2: Unggah Lampiran'}
-            </p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Tahap {step}: {step === 1 ? 'Unggah File & Pratinjau' : 'Unggah Lampiran Sertifikat'}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X size={20} />
@@ -124,122 +174,156 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
 
         <div className="flex-1 overflow-y-auto p-6">
           {step === 1 ? (
-            <div className="space-y-6 flex flex-col items-center py-10">
-              <div className="w-16 h-16 bg-emerald-50 text-[#006E62] rounded-full flex items-center justify-center mb-4">
-                <FileUp size={32} />
-              </div>
-              <div className="text-center max-w-md">
-                <h4 className="text-lg font-bold text-gray-800">Unggah Excel Sertifikasi</h4>
-                <p className="text-xs text-gray-500 mt-2">Gunakan template resmi untuk mengunggah data sertifikat karyawan secara massal.</p>
-              </div>
-              <div className="flex flex-col gap-3 w-full max-w-xs">
-                <button onClick={() => certificationService.downloadTemplate()} className="flex items-center justify-center gap-2 border border-gray-200 px-4 py-3 rounded-md hover:bg-gray-50 transition-colors text-sm font-bold text-gray-600 uppercase">
-                  <Download size={18} /> 1. Download Template
-                </button>
-                <label className="flex items-center justify-center gap-2 bg-[#006E62] text-white px-4 py-3 rounded-md hover:bg-[#005a50] transition-colors shadow-md text-sm font-bold uppercase cursor-pointer">
-                  {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <FileUp size={18} />}
-                  {isProcessing ? 'Memproses...' : '2. Unggah Excel'}
-                  <input type="file" className="hidden" accept=".xlsx" onChange={handleFileChange} disabled={isProcessing} />
-                </label>
-              </div>
-            </div>
-          ) : step === 2 ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between bg-emerald-50 p-4 rounded-md border border-emerald-100">
-                <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold">
-                  <CheckCircle size={20} /> Terbaca {previewData.length} baris. ({previewData.filter(d => d.isValid).length} Valid)
+            <div className="space-y-6">
+              <div className="flex flex-col items-center py-6 border-b border-gray-50">
+                <div className="w-16 h-16 bg-emerald-50 text-[#006E62] rounded-full flex items-center justify-center mb-4">
+                  <FileUp size={32} />
                 </div>
-                <button onClick={() => setStep(1)} className="text-[10px] font-bold uppercase text-[#006E62]">Ganti File</button>
+                <div className="text-center max-w-md">
+                  <h4 className="text-lg font-bold text-gray-800">1. Unggah Excel Sertifikasi</h4>
+                </div>
+
+                <div className="flex items-center gap-3 mt-6 w-full max-w-md">
+                  <button 
+                    onClick={() => certificationService.downloadTemplate()}
+                    className="flex-1 flex items-center justify-center gap-2 border border-gray-200 px-4 py-3 rounded-md hover:bg-gray-50 transition-colors text-sm font-bold text-gray-600 uppercase tracking-tighter"
+                  >
+                    <Download size={18} /> Download Template
+                  </button>
+                  
+                  <label className="flex-1 flex items-center justify-center gap-2 bg-[#006E62] text-white px-4 py-3 rounded-md hover:bg-[#005a50] transition-colors shadow-md text-sm font-bold uppercase tracking-tighter cursor-pointer">
+                    {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <FileUp size={18} />}
+                    {isProcessing ? 'Memproses...' : previewData.length > 0 ? 'Ganti Excel' : 'Unggah Excel'}
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept=".xlsx" 
+                      onChange={handleFileChange} 
+                      onClick={(e) => (e.target as HTMLInputElement).value = ''}
+                      disabled={isProcessing} 
+                    />
+                  </label>
+                </div>
               </div>
-              <div className="border border-gray-100 rounded overflow-x-auto">
-                <table className="w-full text-left text-[11px]">
-                  <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
-                    <tr><th className="px-4 py-2">Status</th><th className="px-4 py-2">Nama</th><th className="px-4 py-2">Jenis</th><th className="px-4 py-2">Sertifikat</th><th className="px-4 py-2">Tgl</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {previewData.map((row, idx) => (
-                      <tr key={idx} className={row.isValid ? '' : 'bg-red-50'}>
-                        <td className="px-4 py-2">{row.isValid ? <CheckCircle size={14} className="text-emerald-500" /> : <AlertTriangle size={14} className="text-red-500" />}</td>
-                        <td className="px-4 py-2 font-bold">{row.full_name}</td>
-                        <td className="px-4 py-2">{row.cert_type}</td>
-                        <td className="px-4 py-2">{row.cert_name}</td>
-                        <td className="px-4 py-2">{row.cert_date}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+
+              {previewData.length > 0 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div className="flex items-center justify-between bg-emerald-50 p-4 rounded-md border border-emerald-100">
+                    <div className="flex items-center gap-2 text-emerald-700">
+                      <CheckCircle size={20} />
+                      <p className="text-xs font-bold">Terbaca {previewData.length} baris. ({previewData.filter(d => d.isValid).length} Valid, <span className={previewData.some(d => !d.isValid) ? 'text-red-600' : ''}>{previewData.filter(d => !d.isValid).length} Error</span>)</p>
+                    </div>
+                  </div>
+
+                  <div className="border border-gray-100 rounded overflow-x-auto">
+                    <table className="w-full text-left text-[10px]">
+                      <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
+                        <tr>
+                          <th className="px-4 py-2">Status</th>
+                          <th className="px-4 py-2">Nama Karyawan</th>
+                          <th className="px-4 py-2">Jenis</th>
+                          <th className="px-4 py-2">Nama Sertifikasi</th>
+                          <th className="px-4 py-2">Tanggal</th>
+                          <th className="px-4 py-2">Keterangan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {previewData.map((row, idx) => (
+                          <tr key={idx} className={row.isValid ? '' : 'bg-red-50'}>
+                            <td className="px-4 py-2">
+                              {row.isValid ? (
+                                <CheckCircle size={14} className="text-emerald-500" />
+                              ) : (
+                                <AlertTriangle size={14} className="text-red-500" />
+                              )}
+                            </td>
+                            <td className="px-4 py-2 font-bold">{row.full_name}</td>
+                            <td className="px-4 py-2">{row.cert_type}</td>
+                            <td className="px-4 py-2 font-bold text-[#006E62]">{row.cert_name}</td>
+                            <td className="px-4 py-2">{row.cert_date}</td>
+                            <td className="px-4 py-2">
+                              {!row.isValid && (
+                                <span className="text-red-600 font-medium">
+                                  {row.errorMsg || 'Data wajib belum lengkap'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-md">
-                    <h4 className="text-xs font-bold text-blue-700 uppercase tracking-widest mb-1">Instruksi Tahap 2</h4>
-                    <p className="text-[11px] text-blue-600 leading-relaxed">
-                      Unggah file sertifikat (PDF/Gambar). Sistem akan mencoba mencocokkan file secara otomatis berdasarkan <strong>Nama Sertifikasi</strong> dan <strong>Nama Karyawan</strong>.
-                    </p>
-                  </div>
+              <div className="flex flex-col items-center py-6 border-b border-gray-50">
+                <div className="w-16 h-16 bg-emerald-50 text-[#006E62] rounded-full flex items-center justify-center mb-4">
+                  <Paperclip size={32} />
+                </div>
+                <div className="text-center max-w-md">
+                  <h4 className="text-lg font-bold text-gray-800">2. Unggah Lampiran Sertifikat (Opsional)</h4>
+                  <p className="text-xs text-gray-500 mt-2">Unggah file PDF/Gambar. Sistem akan mencocokkan nama file dengan Nama Karyawan & Nama Sertifikasi di Excel secara otomatis.</p>
+                </div>
 
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <UploadCloud className="w-8 h-8 mb-2 text-gray-400" />
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Klik untuk Unggah Lampiran</p>
-                      <p className="text-[10px] text-gray-400 mt-1">PDF, JPG, PNG (Bisa pilih banyak sekaligus)</p>
-                    </div>
-                    <input type="file" className="hidden" multiple accept="image/*,application/pdf" onChange={handleFilesChange} />
+                <div className="mt-6 w-full max-w-md">
+                  <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 px-4 py-6 rounded-md hover:bg-gray-50 hover:border-[#006E62] transition-all text-sm font-bold text-gray-400 uppercase tracking-tighter cursor-pointer">
+                    {isUploadingAttachments ? <Loader2 size={24} className="animate-spin text-[#006E62]" /> : <Upload size={24} />}
+                    {isUploadingAttachments ? 'Sedang Mengunggah...' : 'Klik atau Seret File Sertifikat ke Sini'}
+                    <input type="file" className="hidden" accept="image/*,application/pdf" multiple onChange={handleBulkFileUpload} disabled={isUploadingAttachments} />
                   </label>
+                </div>
+              </div>
 
-                  <div className="space-y-2">
-                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">File Terunggah ({attachedFiles.length})</h4>
-                    <div className="max-h-48 overflow-y-auto space-y-1 pr-2">
-                      {attachedFiles.length === 0 ? (
-                        <p className="text-[10px] text-gray-400 italic">Belum ada file yang dipilih.</p>
-                      ) : (
-                        attachedFiles.map((file, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-white border border-gray-100 rounded text-[10px]">
-                            <div className="flex items-center gap-2 truncate">
-                              <FileText size={14} className="text-gray-400" />
-                              <span className="truncate font-medium text-gray-600">{file.name}</span>
-                            </div>
-                            <button onClick={() => removeFile(idx)} className="text-red-400 hover:text-red-600">
-                              <Trash2 size={14} />
-                            </button>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 space-y-3">
+                  <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">File Terunggah ({fileList.length})</h5>
+                  <div className="bg-gray-50 rounded-md border border-gray-100 p-2 max-h-[300px] overflow-y-auto space-y-1">
+                    {fileList.length === 0 ? (
+                      <p className="text-[10px] text-gray-400 text-center py-4 italic">Belum ada file</p>
+                    ) : (
+                      fileList.map((file, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100 group">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Paperclip size={12} className="text-[#006E62] shrink-0" />
+                            <span className="text-[10px] font-medium text-gray-600 truncate">{file.name}</span>
                           </div>
-                        ))
-                      )}
-                    </div>
+                          <button 
+                            onClick={() => handleDeleteFile(file.name)}
+                            className="text-red-400 hover:text-red-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status Pencocokan</h4>
-                  <div className="max-h-[400px] overflow-y-auto space-y-2 pr-2">
-                    {previewData.filter(d => d.isValid).map((row, idx) => {
-                      const matchedFile = getMatchedFile(row.cert_name, row.full_name);
-                      return (
-                        <div key={idx} className={`p-3 rounded-md border transition-all ${matchedFile ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-gray-100'}`}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold text-gray-800 truncate">{row.full_name}</span>
-                            {matchedFile ? (
-                              <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1">
-                                <CheckCircle size={10} /> TERCOCOKKAN
-                              </span>
-                            ) : (
-                              <span className="text-[9px] font-bold text-orange-400 flex items-center gap-1">
-                                <AlertTriangle size={10} /> TANPA FILE
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-gray-500 truncate">{row.cert_name}</div>
-                          {matchedFile && (
-                            <div className="mt-2 flex items-center gap-1.5 text-[9px] text-emerald-700 font-mono italic truncate">
-                              <Paperclip size={10} /> {matchedFile.name}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                <div className="md:col-span-2 space-y-3">
+                  <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status Pencocokan Lampiran</h5>
+                  <div className="border border-gray-100 rounded overflow-hidden">
+                    <table className="w-full text-left text-[10px]">
+                      <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
+                        <tr>
+                          <th className="px-3 py-2">Nama Karyawan</th>
+                          <th className="px-3 py-2">Sertifikasi</th>
+                          <th className="px-3 py-2 text-center">Status Lampiran</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {previewData.map((row, idx) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-medium">{row.full_name}</td>
+                            <td className="px-3 py-2">{row.cert_name}</td>
+                            <td className="px-3 py-2 text-center">
+                              {row.file_id ? <CheckCircle size={14} className="text-emerald-500 mx-auto" /> : <X size={14} className="text-gray-300 mx-auto" />}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -249,16 +333,29 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
 
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
           <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-gray-500 uppercase">Batal</button>
-          {step === 2 && (
-            <button onClick={() => setStep(3)} className="flex items-center gap-2 bg-[#006E62] text-white px-8 py-2 rounded shadow-md hover:bg-[#005a50] transition-all text-xs font-bold uppercase">
-              Lanjut Tahap 2
+          {step === 1 ? (
+            <button 
+              onClick={() => setStep(2)}
+              disabled={previewData.length === 0 || previewData.some(d => !d.isValid)}
+              className="flex items-center gap-2 bg-[#006E62] text-white px-8 py-2 rounded shadow-md hover:bg-[#005a50] transition-all text-xs font-bold uppercase disabled:opacity-50"
+            >
+              Lanjut
             </button>
-          )}
-          {step === 3 && (
+          ) : (
             <div className="flex gap-3">
-              <button onClick={() => setStep(2)} className="px-4 py-2 text-xs font-bold text-[#006E62] uppercase">Kembali</button>
-              <button onClick={handleCommit} disabled={isUploading} className="flex items-center gap-2 bg-[#006E62] text-white px-8 py-2 rounded shadow-md hover:bg-[#005a50] transition-all text-xs font-bold uppercase disabled:opacity-50">
-                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {isUploading ? 'Memproses...' : 'Simpan Data'}
+              <button 
+                onClick={() => setStep(1)}
+                className="px-4 py-2 text-xs font-bold text-[#006E62] uppercase border border-[#006E62] rounded"
+              >
+                Kembali
+              </button>
+              <button 
+                onClick={handleCommit}
+                disabled={isUploading || previewData.some(d => !d.isValid)}
+                className="flex items-center gap-2 bg-[#006E62] text-white px-8 py-2 rounded shadow-md hover:bg-[#005a50] transition-all text-xs font-bold uppercase disabled:opacity-50"
+              >
+                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {isUploading ? 'Sedang Memproses...' : 'Simpan Seluruh Data'}
               </button>
             </div>
           )}

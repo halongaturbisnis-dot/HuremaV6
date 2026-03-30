@@ -208,11 +208,8 @@ const CertificationMain: React.FC = () => {
               <Trash2 size={18} /> Hapus ({selectedIds.length})
             </button>
           )}
-          <button onClick={() => certificationService.downloadTemplate()} className="flex items-center gap-2 border border-gray-200 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium text-gray-600">
-            <Download size={18} /> Unduh Template
-          </button>
           <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 bg-[#006E62] text-white px-4 py-2 rounded-md hover:bg-[#005a50] transition-colors shadow-sm text-sm font-medium">
-            <FileUp size={18} /> Impor Massal
+            <FileUp size={18} /> IMPOR MASSAL
           </button>
         </div>
       </div>

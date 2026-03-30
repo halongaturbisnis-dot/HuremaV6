@@ -33,7 +33,7 @@ const CertificationFormModal: React.FC<CertificationFormModalProps> = ({ onClose
   const typeRef = useRef<HTMLDivElement>(null);
 
   // Menentukan apakah dropdown karyawan harus muncul
-  const isAccountPredefined = !!initialData?.account_id && !initialData?.id;
+  const isAccountPredefined = !!initialData?.account_id;
 
   useEffect(() => {
     if (!isAccountPredefined) {
