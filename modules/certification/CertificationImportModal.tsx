@@ -52,7 +52,7 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
         const normalizedCert = String(certName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         const normalizedName = String(fullName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         
-        const match = updatedFileList.find(f => {
+        const matches = updatedFileList.filter(f => {
           const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
           // Match if filename contains both name and cert
           return normalizedFileName.includes(normalizedCert) && normalizedFileName.includes(normalizedName);
@@ -60,7 +60,9 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
 
         return {
           ...row,
-          file_id: match ? match.id : row.file_id
+          file_id: matches.length > 0 ? matches[0].id : row.file_id,
+          matched_filename: matches.length > 0 ? matches[0].name : row.matched_filename,
+          hasConflict: matches.length > 1
         };
       }));
       
@@ -96,14 +98,16 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
       const normalizedCert = String(certName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       const normalizedName = String(fullName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       
-      const stillExists = updatedFileList.some(f => {
+      const matches = updatedFileList.filter(f => {
         const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         return normalizedFileName.includes(normalizedCert) && normalizedFileName.includes(normalizedName);
       });
 
       return {
         ...row,
-        file_id: stillExists ? row.file_id : null
+        file_id: matches.length > 0 ? matches[0].id : null,
+        matched_filename: matches.length > 0 ? matches[0].name : null,
+        hasConflict: matches.length > 1
       };
     }));
   };
@@ -318,7 +322,19 @@ const CertificationImportModal: React.FC<CertificationImportModalProps> = ({ onC
                             <td className="px-3 py-2 font-medium">{row.full_name}</td>
                             <td className="px-3 py-2">{row.cert_name}</td>
                             <td className="px-3 py-2 text-center">
-                              {row.file_id ? <CheckCircle size={14} className="text-emerald-500 mx-auto" /> : <X size={14} className="text-gray-300 mx-auto" />}
+                              {row.file_id ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="flex items-center gap-1 justify-center">
+                                    <CheckCircle size={14} className="text-emerald-500" />
+                                    {row.hasConflict && <AlertTriangle size={12} className="text-amber-500" title="Ditemukan lebih dari satu file yang cocok" />}
+                                  </div>
+                                  <span className="text-[7px] text-gray-400 truncate max-w-[80px] block" title={row.matched_filename}>
+                                    {row.matched_filename}
+                                  </span>
+                                </div>
+                              ) : (
+                                <X size={14} className="text-gray-300 mx-auto" />
+                              )}
                             </td>
                           </tr>
                         ))}
