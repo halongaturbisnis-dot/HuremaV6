@@ -22,12 +22,8 @@ export const healthService = {
 
   async downloadTemplate() {
     const accounts = await accountService.getAll();
-
     const workbook = new ExcelJS.Workbook();
-    const wsImport = workbook.addWorksheet('Health_Import');
-    
-    wsImport.addRow(["Harap isi data kesehatan terbaru karyawan. Baris dengan (*) wajib diisi."]);
-    wsImport.addRow(['']); 
+    const ws = workbook.addWorksheet('Health_Import');
     
     const headers = [
       'Account ID (Hidden)', 
@@ -38,39 +34,97 @@ export const healthService = {
       'Tanggal Pemeriksaan (YYYY-MM-DD) (*)', 
       'Catatan / Keterangan'
     ];
-    wsImport.addRow(headers);
+    ws.addRow(headers);
 
-    const headerRow = wsImport.getRow(3);
-    headerRow.font = { bold: true };
+    // Add Description Row (Row 2)
+    const descriptionRow = [
+      'Jangan diubah', 'Referensi', 'Referensi', 'Pilih dari Dropdown',
+      'Pilih dari Dropdown', 'Format: YYYY-MM-DD', 'Opsional'
+    ];
+    ws.addRow(descriptionRow);
 
-    // Mandatory columns: D (Status Medis), E (Risiko), F (Tanggal)
-    [4, 5, 6].forEach(colIdx => {
-      const cell = headerRow.getCell(colIdx);
-      cell.font = { color: { argb: 'FFFF0000' }, bold: true };
+    // Add Example Row (Row 3)
+    const exampleRow = [
+      'ID_AKUN', 
+      'NIK001', 
+      'Contoh Nama', 
+      'Sehat', 
+      'Tidak ada risiko kerja', 
+      new Date().toISOString().split('T')[0], 
+      'Contoh pengisian data kesehatan'
+    ];
+    ws.addRow(exampleRow);
+    
+    // Add All Accounts (Row 4 onwards)
+    accounts.forEach(acc => {
+      ws.addRow([
+        acc.id,
+        acc.internal_nik,
+        acc.full_name,
+        '', '', '', ''
+      ]);
     });
 
-    accounts?.forEach(acc => {
-      wsImport.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '']);
+    // Style headers
+    const headerRow = ws.getRow(1);
+    headerRow.eachCell((cell) => {
+      const isMandatory = cell.value?.toString().includes('(*)');
+      cell.font = { 
+        bold: true, 
+        color: { argb: isMandatory ? 'FFFF0000' : 'FF000000' } 
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
     });
 
-    const rowCount = wsImport.rowCount;
-    for (let i = 4; i <= rowCount; i++) {
-      const cellF = wsImport.getCell(`F${i}`);
-      cellF.dataValidation = {
+    // Style description row
+    const descRow = ws.getRow(2);
+    descRow.font = { italic: true, size: 10 };
+    descRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFF9C4' } // Light yellow
+    };
+
+    const totalRows = 3 + accounts.length;
+    for (let i = 4; i <= totalRows; i++) {
+      // Dropdown for Status Medis
+      const statusCell = ws.getCell(`D${i}`);
+      statusCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Sehat,Fit dengan Catatan,Unfit,Menunggu Hasil"']
+      };
+
+      // Dropdown for Risiko Kesehatan
+      const riskCell = ws.getCell(`E${i}`);
+      riskCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Tidak ada risiko kerja,Risiko Rendah,Risiko Sedang,Risiko Tinggi,Risiko Sangat Tinggi"']
+      };
+
+      // Date validation
+      const dateCell = ws.getCell(`F${i}`);
+      dateCell.dataValidation = {
         type: 'date',
         operator: 'greaterThan',
         allowBlank: true,
         formulae: [new Date(1900, 0, 1)]
       };
-      cellF.numFmt = 'yyyy-mm-dd';
+      dateCell.numFmt = 'yyyy-mm-dd';
     }
 
-    wsImport.columns.forEach((col, idx) => {
-      col.width = [20, 15, 25, 20, 20, 22, 25][idx];
+    ws.columns.forEach((col, idx) => {
+      col.width = [20, 15, 25, 25, 25, 25, 30][idx];
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `HUREMA_Health_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const dataBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(dataBlob, `HUREMA_Health_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
   },
 
   async processImport(file: File) {
@@ -80,30 +134,72 @@ export const healthService = {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { range: 2 });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
-          const results = jsonData.map((row: any) => {
-            let effectiveDate = row['Tanggal Pemeriksaan (YYYY-MM-DD) (*)'];
-            if (typeof effectiveDate === 'number') {
-              effectiveDate = new Date((effectiveDate - 25569) * 86400 * 1000).toISOString().split('T')[0];
-            } else if (effectiveDate && String(effectiveDate).includes('/')) {
-              const parts = String(effectiveDate).split('/');
-              if (parts.length === 3) {
-                effectiveDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          const results = jsonData
+            .filter((row: any) => {
+              const accountId = String(row['Account ID (Hidden)'] || '').trim();
+              const status = String(row['Status Medis (*)'] || '').trim();
+              return accountId !== '' && accountId !== 'ID_AKUN' && accountId !== 'Jangan diubah' && status !== '';
+            })
+            .map((row: any) => {
+              const formatExcelDate = (val: any) => {
+                if (!val) return null;
+                if (typeof val === 'number') {
+                  const date = new Date((val - 25569) * 86400 * 1000);
+                  if (isNaN(date.getTime())) return null;
+                  return date.toISOString().split('T')[0];
+                }
+                const str = String(val).trim();
+                if (!str) return null;
+
+                // Handle DD/MM/YYYY or DD-MM-YYYY format
+                const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (ddmmyyyy) {
+                  const day = ddmmyyyy[1].padStart(2, '0');
+                  const month = ddmmyyyy[2].padStart(2, '0');
+                  const year = ddmmyyyy[3];
+                  return `${year}-${month}-${day}`;
+                }
+
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                const parsed = new Date(str);
+                if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+                return str;
+              };
+
+              const requiredFields = [
+                'Account ID (Hidden)', 'Status Medis (*)', 'Risiko Kesehatan (*)', 
+                'Tanggal Pemeriksaan (YYYY-MM-DD) (*)'
+              ];
+
+              let errorMsg = '';
+              const missingFields = requiredFields.filter(field => {
+                const val = row[field];
+                return val === undefined || val === null || String(val).trim() === '';
+              });
+
+              if (missingFields.length > 0) {
+                const cleanNames = missingFields.map(f => f.replace(' (*)', '').replace(' (YYYY-MM-DD)', ''));
+                errorMsg = `Kolom wajib belum lengkap: [${cleanNames.join(', ')}]`;
               }
-            }
 
-            return {
-              account_id: row['Account ID (Hidden)'],
-              full_name: row['Nama Karyawan'],
-              mcu_status: row['Status Medis (*)'],
-              health_risk: row['Risiko Kesehatan (*)'],
-              change_date: effectiveDate,
-              notes: row['Catatan / Keterangan'] || null,
-              file_mcu_id: null,
-              isValid: !!(row['Account ID (Hidden)'] && row['Status Medis (*)'] && row['Risiko Kesehatan (*)'] && effectiveDate)
-            };
-          });
+              const isValid = !errorMsg;
+
+              return {
+                account_id: row['Account ID (Hidden)'],
+                full_name: row['Nama Karyawan'],
+                internal_nik: row['NIK Internal'],
+                mcu_status: row['Status Medis (*)'],
+                health_risk: row['Risiko Kesehatan (*)'],
+                change_date: formatExcelDate(row['Tanggal Pemeriksaan (YYYY-MM-DD) (*)']),
+                notes: row['Catatan / Keterangan'] || null,
+                file_mcu_id: null, // Will be matched in modal
+                isValid,
+                errorMsg
+              };
+            });
           resolve(results);
         } catch (err) { reject(err); }
       };

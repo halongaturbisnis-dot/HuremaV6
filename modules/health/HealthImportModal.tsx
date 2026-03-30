@@ -46,8 +46,10 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
 
         const matches = updatedFileList.filter(f => {
           const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-          return normalizedFileName.includes(target) || target.includes(normalizedFileName) || 
-                 (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate));
+          // Match if filename contains name + date (precise) or just the name (as requested)
+          return normalizedFileName.includes(target) || 
+                 (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate)) ||
+                 normalizedFileName.includes(normalizedName);
         });
 
         return {
@@ -85,8 +87,10 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
 
       const matches = updatedFileList.filter(f => {
         const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        return normalizedFileName.includes(target) || target.includes(normalizedFileName) || 
-               (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate));
+        // Match if filename contains name + date (precise) or just the name (as requested)
+        return normalizedFileName.includes(target) || 
+               (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate)) ||
+               normalizedFileName.includes(normalizedName);
       });
 
       return {
@@ -114,8 +118,10 @@ const HealthImportModal: React.FC<HealthImportModalProps> = ({ onClose, onSucces
 
         const matches = fileList.filter(f => {
           const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-          return normalizedFileName.includes(target) || target.includes(normalizedFileName) || 
-                 (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate));
+          // Match if filename contains name + date (precise) or just the name (as requested)
+          return normalizedFileName.includes(target) || 
+                 (normalizedFileName.includes(normalizedName) && normalizedFileName.includes(normalizedDate)) ||
+                 normalizedFileName.includes(normalizedName);
         });
 
         return {
