@@ -13,10 +13,10 @@ interface DisciplineImportModalProps {
 const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, onSuccess, type = 'warning' }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [previewData, setPreviewData] = useState<any[]>([]);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [fileList, setFileList] = useState<{ name: string; id: string }[]>([]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -28,7 +28,6 @@ const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, 
         ? await disciplineService.processWarningImport(file) as any[]
         : await disciplineService.processTerminationImport(file) as any[];
       setPreviewData(results);
-      setStep(2);
     } catch (error) {
       Swal.fire('Gagal', 'Format file tidak didukung atau kolom tidak sesuai.', 'error');
     } finally {
@@ -36,21 +35,83 @@ const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, 
     }
   };
 
-  const handleDocFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setSelectedFiles(Array.from(e.target.files));
+  const handleBulkFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setIsUploadingAttachments(true);
+      const newFiles: { name: string; id: string }[] = [];
+      
+      const uploadPromises = Array.from(files).map(async (f) => {
+        const file = f as File;
+        const fileId = await googleDriveService.uploadFile(file);
+        const fileName = file.name.split('.').slice(0, -1).join('.');
+        newFiles.push({ name: fileName, id: fileId });
+      });
+
+      await Promise.all(uploadPromises);
+      
+      const updatedFileList = [...fileList, ...newFiles];
+      setFileList(updatedFileList);
+      
+      // Update preview data with new attachments based on Name mapping
+      setPreviewData(prev => prev.map(row => {
+        const fullName = row.full_name || '';
+        if (!fullName) return row;
+        
+        const normalizedName = String(fullName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        
+        const matches = updatedFileList.filter(f => {
+          const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          return normalizedFileName.includes(normalizedName);
+        });
+
+        return {
+          ...row,
+          file_id: matches.length > 0 ? matches[0].id : row.file_id,
+          matched_filename: matches.length > 0 ? matches[0].name : row.matched_filename,
+          hasConflict: matches.length > 1
+        };
+      }));
+      
+      Swal.fire({
+        title: 'Berhasil!',
+        text: `${files.length} dokumen berhasil ditambahkan.`,
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire('Gagal', 'Gagal mengunggah beberapa dokumen.', 'error');
+    } finally {
+      setIsUploadingAttachments(false);
+      if (e.target) e.target.value = '';
     }
   };
 
-  const getMatchedFile = (name: string) => {
-    return selectedFiles.find(f => {
-      const fileName = f.name.split('.').slice(0, -1).join('.').toLowerCase().trim();
-      return fileName === name.toLowerCase().trim();
-    });
-  };
+  const handleDeleteFile = (fileName: string) => {
+    const updatedFileList = fileList.filter(f => f.name !== fileName);
+    setFileList(updatedFileList);
+    
+    setPreviewData(prev => prev.map(row => {
+      const fullName = row.full_name || '';
+      if (!fullName) return row;
+      
+      const normalizedName = String(fullName).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      
+      const matches = updatedFileList.filter(f => {
+        const normalizedFileName = f.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return normalizedFileName.includes(normalizedName);
+      });
 
-  const hasDuplicateName = (name: string) => {
-    return previewData.filter(d => d.full_name?.toLowerCase().trim() === name.toLowerCase().trim()).length > 1;
+      return {
+        ...row,
+        file_id: matches.length > 0 ? matches[0].id : null,
+        matched_filename: matches.length > 0 ? matches[0].name : null,
+        hasConflict: matches.length > 1
+      };
+    }));
   };
 
   const handleCommit = async () => {
@@ -69,29 +130,10 @@ const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, 
     if (confirm.isConfirmed) {
       try {
         setIsUploading(true);
-        const dataToCommit = [...previewData];
-        const rowsWithFiles = dataToCommit.filter(row => row.isValid && getMatchedFile(row.full_name));
-        
-        setUploadProgress({ current: 0, total: rowsWithFiles.length });
-
-        // 1. Upload matched files to Drive
-        for (let i = 0; i < dataToCommit.length; i++) {
-          const row = dataToCommit[i];
-          if (row.isValid) {
-            const matchedFile = getMatchedFile(row.full_name);
-            if (matchedFile) {
-              const fileId = await googleDriveService.uploadFile(matchedFile);
-              dataToCommit[i].file_id = fileId;
-              setUploadProgress(prev => ({ ...prev, current: prev.current + 1 }));
-            }
-          }
-        }
-
-        // 2. Commit to Database
         if (type === 'warning') {
-          await disciplineService.commitWarningImport(dataToCommit);
+          await disciplineService.commitWarningImport(previewData);
         } else {
-          await disciplineService.commitTerminationImport(dataToCommit);
+          await disciplineService.commitTerminationImport(previewData);
         }
 
         Swal.fire('Berhasil!', `Seluruh data ${type === 'warning' ? 'SP' : 'Exit'} telah diperbarui.`, 'success');
@@ -101,7 +143,6 @@ const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, 
         Swal.fire('Gagal', 'Terjadi kesalahan saat memproses data.', 'error');
       } finally {
         setIsUploading(false);
-        setUploadProgress({ current: 0, total: 0 });
       }
     }
   };
@@ -119,130 +160,168 @@ const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, 
             <h3 className={`text-base font-bold ${type === 'warning' ? 'text-[#006E62]' : 'text-red-600'}`}>
               Impor Massal {type === 'warning' ? 'Riwayat SP' : 'Karyawan Keluar (Exit)'}
             </h3>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Tahap {step}: {step === 1 ? 'Unggah File' : 'Pratinjau Data'}</p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Tahap {step}: {step === 1 ? 'Unggah File & Pratinjau' : 'Unggah Dokumen'}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors"><X size={20} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
           {step === 1 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
-              <div className="space-y-6 flex flex-col items-center text-center border-r border-gray-100 pr-8">
-                <FileUp size={48} className={type === 'warning' ? 'text-[#006E62]' : 'text-red-600'} />
-                <div className="max-w-md">
+            <div className="space-y-6">
+              <div className="flex flex-col items-center py-6 border-b border-gray-50">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${type === 'warning' ? 'bg-emerald-50 text-[#006E62]' : 'bg-red-50 text-red-600'}`}>
+                  <FileUp size={32} />
+                </div>
+                <div className="text-center max-w-md">
                   <h4 className="text-lg font-bold text-gray-800">1. Data Excel</h4>
                   <p className="text-xs text-gray-500 mt-2">
                     Gunakan template untuk mencatat data {type === 'warning' ? 'Surat Peringatan' : 'Exit/Resign'} secara massal.
                   </p>
                 </div>
-                <div className="flex flex-col gap-3 w-full max-w-xs">
-                  <button onClick={getTemplateDownloadAction} className="flex items-center justify-center gap-2 border border-gray-200 px-4 py-3 rounded-md hover:bg-gray-50 text-xs font-bold text-gray-600 uppercase">
+                <div className="flex items-center gap-3 mt-6 w-full max-w-md">
+                  <button onClick={getTemplateDownloadAction} className="flex-1 flex items-center justify-center gap-2 border border-gray-200 px-4 py-3 rounded-md hover:bg-gray-50 text-sm font-bold text-gray-600 uppercase tracking-tighter">
                     <Download size={18} /> Download Template
                   </button>
-                  <label className={`flex items-center justify-center gap-2 text-white px-4 py-3 rounded-md transition-colors shadow-md text-xs font-bold uppercase cursor-pointer ${type === 'warning' ? 'bg-[#006E62] hover:bg-[#005a50]' : 'bg-red-600 hover:bg-red-700'}`}>
+                  <label className={`flex-1 flex items-center justify-center gap-2 text-white px-4 py-3 rounded-md transition-colors shadow-md text-sm font-bold uppercase tracking-tighter cursor-pointer ${type === 'warning' ? 'bg-[#006E62] hover:bg-[#005a50]' : 'bg-red-600 hover:bg-red-700'}`}>
                     {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <FileUp size={18} />}
-                    {isProcessing ? 'Memproses...' : 'Unggah Excel'}
+                    {isProcessing ? 'Memproses...' : previewData.length > 0 ? 'Ganti Excel' : 'Unggah Excel'}
                     <input type="file" className="hidden" accept=".xlsx" onChange={handleFileChange} disabled={isProcessing} />
                   </label>
                 </div>
               </div>
 
-              <div className="space-y-6 flex flex-col items-center text-center">
-                <Paperclip size={48} className="text-gray-400" />
-                <div className="max-w-md">
+              {previewData.length > 0 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div className={`flex items-center justify-between p-4 rounded border text-xs font-bold ${type === 'warning' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={20} /> Terbaca {previewData.length} baris. ({previewData.filter(d => d.isValid).length} Valid)
+                    </div>
+                  </div>
+                  <div className="border border-gray-100 rounded overflow-x-auto text-[10px]">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
+                        <tr>
+                          <th className="px-4 py-2">Status</th>
+                          <th className="px-4 py-2">Nama</th>
+                          <th className="px-4 py-2">{type === 'warning' ? 'Tipe SP' : 'Tipe Exit'}</th>
+                          <th className="px-4 py-2">Alasan</th>
+                          <th className="px-4 py-2">{type === 'warning' ? 'Tgl SP' : 'Tgl Exit'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {previewData.map((row, idx) => (
+                          <tr key={idx} className={row.isValid ? '' : 'bg-red-50'}>
+                            <td className="px-4 py-2">
+                              {row.isValid ? (
+                                <CheckCircle size={14} className="text-emerald-500" />
+                              ) : (
+                                <AlertTriangle size={14} className="text-red-500" />
+                              )}
+                            </td>
+                            <td className="px-4 py-2 font-bold">{row.full_name}</td>
+                            <td className={`px-4 py-2 uppercase font-bold ${type === 'warning' ? 'text-orange-600' : 'text-red-600'}`}>
+                              <div className="flex items-center gap-2">
+                                {type === 'warning' ? row.warning_type : row.termination_type}
+                                {row.mitigationApplied && (
+                                  <div className="group relative">
+                                    <Info size={12} className="text-blue-500 cursor-help" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-800 text-white text-[10px] rounded shadow-xl z-10">
+                                      Sistem menyesuaikan nilai Pesangon/Penalti agar sesuai dengan tipe exit.
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 truncate max-w-xs">{row.reason}</td>
+                            <td className="px-4 py-2">{type === 'warning' ? row.issue_date : row.termination_date}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex flex-col items-center py-6 border-b border-gray-50">
+                <div className="w-16 h-16 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mb-4">
+                  <Paperclip size={32} />
+                </div>
+                <div className="text-center max-w-md">
                   <h4 className="text-lg font-bold text-gray-800">2. Dokumen (Opsional)</h4>
                   <p className="text-xs text-gray-500 mt-2">
                     Unggah file PDF/Gambar. Namai file sesuai <b>Nama Karyawan</b> di Excel agar sistem dapat melakukan mapping otomatis.
                   </p>
                 </div>
-                <div className="w-full max-w-xs">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-200 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <FileUp className="w-8 h-8 mb-3 text-gray-400" />
-                      <p className="mb-2 text-xs text-gray-500 font-bold uppercase">Pilih File Dokumen</p>
-                      <p className="text-[10px] text-gray-400">{selectedFiles.length} file terpilih</p>
-                    </div>
-                    <input type="file" className="hidden" multiple accept="image/*,.pdf" onChange={handleDocFilesChange} />
+                <div className="mt-6 w-full max-w-md">
+                  <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 px-4 py-6 rounded-md hover:bg-gray-50 hover:border-gray-400 transition-all text-sm font-bold text-gray-400 uppercase tracking-tighter cursor-pointer">
+                    {isUploadingAttachments ? <Loader2 size={24} className="animate-spin text-gray-400" /> : <Upload size={24} />}
+                    {isUploadingAttachments ? 'Sedang Mengunggah...' : 'Klik atau Seret File Dokumen ke Sini'}
+                    <input type="file" className="hidden" multiple accept="image/*,.pdf" onChange={handleBulkFileUpload} disabled={isUploadingAttachments} />
                   </label>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className={`flex items-center justify-between p-4 rounded border text-xs font-bold ${type === 'warning' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-                <div className="flex items-center gap-2">
-                  <CheckCircle size={20} /> Terbaca {previewData.length} baris. ({previewData.filter(d => d.isValid).length} Valid)
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 space-y-3">
+                  <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">File Terunggah ({fileList.length})</h5>
+                  <div className="bg-gray-50 rounded-md border border-gray-100 p-2 max-h-[300px] overflow-y-auto space-y-1">
+                    {fileList.length === 0 ? (
+                      <p className="text-[10px] text-gray-400 text-center py-4 italic">Belum ada file</p>
+                    ) : (
+                      fileList.map((file, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100 group">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Paperclip size={12} className="text-gray-400 shrink-0" />
+                            <span className="text-[10px] font-medium text-gray-600 truncate">{file.name}</span>
+                          </div>
+                          <button onClick={() => handleDeleteFile(file.name)} className="text-red-400 hover:text-red-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-                <button onClick={() => setStep(1)} className="uppercase hover:underline">Ganti File / Tambah Dokumen</button>
-              </div>
-              <div className="border border-gray-100 rounded overflow-x-auto text-[11px]">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
-                    <tr>
-                      <th className="px-4 py-2">Status</th>
-                      <th className="px-4 py-2">Nama</th>
-                      <th className="px-4 py-2">{type === 'warning' ? 'Tipe SP' : 'Tipe Exit'}</th>
-                      <th className="px-4 py-2">Alasan</th>
-                      <th className="px-4 py-2">{type === 'warning' ? 'Tgl SP' : 'Tgl Exit'}</th>
-                      <th className="px-4 py-2">Dokumen</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {previewData.map((row, idx) => {
-                      const matchedFile = getMatchedFile(row.full_name || '');
-                      const isDuplicate = hasDuplicateName(row.full_name || '');
-                      
-                      return (
-                        <tr key={idx} className={row.isValid ? '' : 'bg-red-50'}>
-                          <td className="px-4 py-2">
-                            {row.isValid ? (
-                              <CheckCircle size={14} className="text-emerald-500" />
-                            ) : (
-                              <AlertTriangle size={14} className="text-red-500" />
-                            )}
-                          </td>
-                          <td className="px-4 py-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold">{row.full_name}</span>
-                              {isDuplicate && (
-                                <div className="group relative">
-                                  <AlertTriangle size={12} className="text-amber-500 cursor-help" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-800 text-white text-[10px] rounded shadow-xl z-10">
-                                    Nama ganda terdeteksi. Pastikan file yang terlampir sudah sesuai.
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className={`px-4 py-2 uppercase font-bold ${type === 'warning' ? 'text-orange-600' : 'text-red-600'}`}>
-                            <div className="flex items-center gap-2">
-                              {type === 'warning' ? row.warning_type : row.termination_type}
-                              {row.mitigationApplied && (
-                                <div className="group relative">
-                                  <Info size={12} className="text-blue-500 cursor-help" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-800 text-white text-[10px] rounded shadow-xl z-10">
-                                    Sistem menyesuaikan nilai Pesangon/Penalti agar sesuai dengan tipe exit.
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 truncate max-w-xs">{row.reason}</td>
-                          <td className="px-4 py-2">{type === 'warning' ? row.issue_date : row.termination_date}</td>
-                          <td className="px-4 py-2">
-                            {matchedFile ? (
-                              <div className="flex items-center gap-1 text-emerald-600 font-bold">
-                                <Paperclip size={12} /> {matchedFile.name.length > 15 ? matchedFile.name.substring(0, 12) + '...' : matchedFile.name}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 italic">Tidak ada file</span>
-                            )}
-                          </td>
+
+                <div className="md:col-span-2 space-y-3">
+                  <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status Pencocokan Dokumen</h5>
+                  <div className="border border-gray-100 rounded overflow-hidden">
+                    <table className="w-full text-left text-[10px]">
+                      <thead className="bg-gray-50 font-bold text-gray-500 uppercase">
+                        <tr>
+                          <th className="px-3 py-2">Nama Karyawan</th>
+                          <th className="px-3 py-2">{type === 'warning' ? 'Tipe SP' : 'Tipe Exit'}</th>
+                          <th className="px-3 py-2 text-center">Status</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {previewData.map((row, idx) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-medium">{row.full_name}</td>
+                            <td className="px-3 py-2 uppercase">{type === 'warning' ? row.warning_type : row.termination_type}</td>
+                            <td className="px-3 py-2 text-center">
+                              {row.file_id ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="flex items-center gap-1 justify-center">
+                                    <CheckCircle size={14} className="text-emerald-500" />
+                                    {row.hasConflict && <AlertTriangle size={12} className="text-amber-500" title="Nama ganda terdeteksi" />}
+                                  </div>
+                                  <span className="text-[7px] text-gray-400 truncate max-w-[80px] block" title={row.matched_filename}>
+                                    {row.matched_filename}
+                                  </span>
+                                </div>
+                              ) : (
+                                <X size={14} className="text-gray-300 mx-auto" />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -250,22 +329,37 @@ const DisciplineImportModal: React.FC<DisciplineImportModalProps> = ({ onClose, 
 
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
           <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-gray-500 uppercase">Batal</button>
-          {step === 2 && (
+          {step === 1 ? (
             <button 
-              onClick={handleCommit} 
-              disabled={isUploading} 
+              onClick={() => setStep(2)}
+              disabled={previewData.length === 0 || previewData.some(d => !d.isValid)}
               className={`flex items-center gap-2 text-white px-8 py-2 rounded shadow-md transition-all text-xs font-bold uppercase disabled:opacity-50 ${type === 'warning' ? 'bg-[#006E62] hover:bg-[#005a50]' : 'bg-red-600 hover:bg-red-700'}`}
             >
-              {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
-              {isUploading 
-                ? `Mengunggah (${uploadProgress.current}/${uploadProgress.total})...` 
-                : 'Simpan Seluruh Data'}
+              Lanjut
             </button>
+          ) : (
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setStep(1)}
+                className={`px-4 py-2 text-xs font-bold uppercase border rounded ${type === 'warning' ? 'text-[#006E62] border-[#006E62]' : 'text-red-600 border-red-600'}`}
+              >
+                Kembali
+              </button>
+              <button 
+                onClick={handleCommit} 
+                disabled={isUploading} 
+                className={`flex items-center gap-2 text-white px-8 py-2 rounded shadow-md transition-all text-xs font-bold uppercase disabled:opacity-50 ${type === 'warning' ? 'bg-[#006E62] hover:bg-[#005a50]' : 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                {isUploading ? 'Sedang Memproses...' : 'Simpan Seluruh Data'}
+              </button>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
+
 };
 
 export default DisciplineImportModal;
