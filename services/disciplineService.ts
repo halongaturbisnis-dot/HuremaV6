@@ -193,7 +193,7 @@ export const disciplineService = {
     const ws = workbook.addWorksheet('Warning_Import');
     
     // Row 1: Headers
-    ws.addRow(['Account ID (Hidden)', 'NIK Internal', 'Nama Karyawan', 'Jenis Peringatan (*)', 'Alasan (*)', 'Tanggal (YYYY-MM-DD) (*)', 'Link Surat G-Drive']);
+    ws.addRow(['Account ID (Hidden)', 'NIK Internal', 'Nama Karyawan', 'Jenis Peringatan (*)', 'Alasan (*)', 'Tanggal (YYYY-MM-DD) (*)']);
     
     // Row 2: Descriptions
     ws.addRow([
@@ -202,8 +202,7 @@ export const disciplineService = {
       'Nama Lengkap', 
       'Pilih: Teguran Lisan, Surat Peringatan 1 (SP1), Surat Peringatan 2 (SP2), Surat Peringatan 3 (SP3)', 
       'Alasan pemberian sanksi', 
-      'Format: YYYY-MM-DD', 
-      'Link file pendukung (opsional)'
+      'Format: YYYY-MM-DD'
     ]);
 
     // Row 3: Example
@@ -213,13 +212,12 @@ export const disciplineService = {
       'Contoh Nama', 
       'Surat Peringatan 1 (SP1)', 
       'Melanggar peraturan perusahaan pasal 5', 
-      new Date().toISOString().split('T')[0], 
-      'https://drive.google.com/...'
+      new Date().toISOString().split('T')[0]
     ]);
 
     // Row 4 onwards: Data
     accounts?.forEach(acc => {
-      ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '']);
+      ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '']);
     });
 
     // Styling
@@ -252,7 +250,7 @@ export const disciplineService = {
       dateCell.numFmt = 'yyyy-mm-dd';
     }
 
-    ws.columns.forEach((col, idx) => { col.width = [20, 15, 25, 20, 30, 22, 30][idx]; });
+    ws.columns.forEach((col, idx) => { col.width = [20, 15, 25, 20, 30, 22][idx]; });
     const buffer = await workbook.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `HUREMA_Warning_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
   },
@@ -265,11 +263,7 @@ export const disciplineService = {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { range: 0 }); // Read from start to get headers
-          
-          // Filter out description and example rows (row 2 and 3 in Excel are index 0 and 1 in JSON if range starts at 1, but sheet_to_json with headers uses row 1 as keys)
-          // Actually, sheet_to_json by default uses the first row as headers.
-          // So row 1 = headers. row 2 = first data row (description). row 3 = second data row (example). row 4 = third data row (actual data).
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { range: 0 });
           
           const results = jsonData.slice(2).map((row: any) => {
             const parseDate = (val: any) => {
@@ -283,7 +277,6 @@ export const disciplineService = {
               warning_type: row['Jenis Peringatan (*)'],
               reason: row['Alasan (*)'],
               issue_date: issueDate,
-              file_link: row['Link Surat G-Drive'],
               isValid: !!(row['Account ID (Hidden)'] && row['Jenis Peringatan (*)'] && issueDate)
             };
           });
@@ -298,13 +291,12 @@ export const disciplineService = {
     const validData = data.filter(d => d.isValid);
     if (validData.length === 0) return;
 
-    // Optimasi: Gunakan Bulk Insert untuk menghilangkan lag saat commit
     const payload = validData.map(item => ({
       account_id: item.account_id,
       warning_type: item.warning_type,
       reason: item.reason,
       issue_date: item.issue_date,
-      file_id: item.file_link ? item.file_link.match(/[-\w]{25,}/)?.[0] : null
+      file_id: item.file_id || null
     }));
 
     const { error } = await supabase.from('account_warning_logs').insert(payload);
@@ -325,7 +317,7 @@ export const disciplineService = {
     const ws = workbook.addWorksheet('Termination_Import');
     
     // Row 1: Headers
-    ws.addRow(['Account ID (Hidden)', 'NIK Internal', 'Nama Karyawan', 'Tipe Exit (*)', 'Tanggal Exit (YYYY-MM-DD) (*)', 'Alasan (*)', 'Uang Pesangon (PHK)', 'Biaya Penalti (Resign)', 'Link Dokumen G-Drive']);
+    ws.addRow(['Account ID (Hidden)', 'NIK Internal', 'Nama Karyawan', 'Tipe Exit (*)', 'Tanggal Exit (YYYY-MM-DD) (*)', 'Alasan (*)', 'Uang Pesangon (PHK)', 'Biaya Penalti (Resign)']);
     
     // Row 2: Descriptions
     ws.addRow([
@@ -336,8 +328,7 @@ export const disciplineService = {
       'Format: YYYY-MM-DD', 
       'Alasan berhenti bekerja', 
       'Jumlah pesangon (jika ada)', 
-      'Jumlah penalti (jika ada)', 
-      'Link file pendukung (opsional)'
+      'Jumlah penalti (jika ada)'
     ]);
 
     // Row 3: Example
@@ -349,13 +340,12 @@ export const disciplineService = {
       new Date().toISOString().split('T')[0], 
       'Mendapatkan tawaran di tempat lain', 
       0, 
-      0, 
-      'https://drive.google.com/...'
+      0
     ]);
 
     // Row 4 onwards: Data
     accounts?.forEach(acc => {
-      ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', 0, 0, '']);
+      ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', 0, 0]);
     });
 
     // Styling
@@ -388,7 +378,7 @@ export const disciplineService = {
       dateCell.numFmt = 'yyyy-mm-dd';
     }
 
-    ws.columns.forEach((col, idx) => { col.width = [20, 15, 25, 15, 22, 30, 20, 20, 30][idx]; });
+    ws.columns.forEach((col, idx) => { col.width = [20, 15, 25, 15, 22, 30, 20, 20][idx]; });
     const buffer = await workbook.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `HUREMA_Termination_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
   },
@@ -409,16 +399,31 @@ export const disciplineService = {
               return val;
             };
             const termDate = parseDate(row['Tanggal Exit (YYYY-MM-DD) (*)']);
+            const type = row['Tipe Exit (*)'];
+            
+            let severance = Number(row['Uang Pesangon (PHK)']) || 0;
+            let penalty = Number(row['Biaya Penalti (Resign)']) || 0;
+            let mitigationApplied = false;
+
+            // Mitigation Logic
+            if (type === 'Resign' && severance > 0) {
+              severance = 0;
+              mitigationApplied = true;
+            } else if (type === 'Pemecatan / PHK' && penalty > 0) {
+              penalty = 0;
+              mitigationApplied = true;
+            }
+
             return {
               account_id: row['Account ID (Hidden)'],
               full_name: row['Nama Karyawan'],
-              termination_type: row['Tipe Exit (*)'],
+              termination_type: type,
               termination_date: termDate,
               reason: row['Alasan (*)'],
-              severance_amount: row['Uang Pesangon (PHK)'] || 0,
-              penalty_amount: row['Biaya Penalti (Resign)'] || 0,
-              file_link: row['Link Dokumen G-Drive'],
-              isValid: !!(row['Account ID (Hidden)'] && row['Tipe Exit (*)'] && termDate)
+              severance_amount: severance,
+              penalty_amount: penalty,
+              mitigationApplied,
+              isValid: !!(row['Account ID (Hidden)'] && type && termDate)
             };
           });
           resolve(results);
@@ -440,19 +445,18 @@ export const disciplineService = {
       reason: item.reason,
       severance_amount: Number(item.severance_amount) || 0,
       penalty_amount: Number(item.penalty_amount) || 0,
-      file_id: item.file_link ? item.file_link.match(/[-\w]{25,}/)?.[0] : null
+      file_id: item.file_id || null
     }));
 
     const { error: logError } = await supabase.from('account_termination_logs').insert(logPayload);
     if (logError) throw logError;
 
-    // 2. Update Accounts end_date (Sequential for safety, but in a loop)
+    // 2. Update Accounts end_date and Create Compensation
     for (const item of validData) {
       await accountService.update(item.account_id, {
         end_date: item.termination_date
       });
 
-      // Create Compensation Record if amount > 0
       if (item.severance_amount > 0 || item.penalty_amount > 0) {
         const isSeverance = item.termination_type === 'Pemecatan / PHK';
         await financeService.createCompensation({
