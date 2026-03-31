@@ -8,14 +8,21 @@ import { WarningLogInput } from '../../types';
 
 interface WarningFormProps {
   accountId: string;
+  initialData?: any;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-const WarningForm: React.FC<WarningFormProps> = ({ accountId, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState<WarningLogInput>({
+const WarningForm: React.FC<WarningFormProps> = ({ accountId, initialData, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState<WarningLogInput>(initialData ? {
+    account_id: initialData.account_id,
+    warning_type: initialData.warning_type,
+    reason: initialData.reason,
+    issue_date: initialData.issue_date,
+    file_id: initialData.file_id || ''
+  } : {
     account_id: accountId,
-    warning_type: 'Teguran',
+    warning_type: 'Teguran Lisan',
     reason: '',
     issue_date: new Date().toISOString().split('T')[0],
     file_id: ''
@@ -28,8 +35,13 @@ const WarningForm: React.FC<WarningFormProps> = ({ accountId, onClose, onSuccess
     e.preventDefault();
     try {
       setIsSaving(true);
-      await disciplineService.createWarning(formData);
-      Swal.fire({ title: 'Berhasil!', text: 'Surat Peringatan telah dicatat.', icon: 'success', timer: 1500, showConfirmButton: false });
+      if (initialData) {
+        await disciplineService.updateWarning(initialData.id, formData as any);
+        Swal.fire({ title: 'Berhasil!', text: 'Surat Peringatan telah diperbarui.', icon: 'success', timer: 1500, showConfirmButton: false });
+      } else {
+        await disciplineService.createWarning(formData);
+        Swal.fire({ title: 'Berhasil!', text: 'Surat Peringatan telah dicatat.', icon: 'success', timer: 1500, showConfirmButton: false });
+      }
       onSuccess();
     } catch (error) {
       Swal.fire('Gagal', 'Terjadi kesalahan saat menyimpan data.', 'error');
@@ -71,10 +83,10 @@ const WarningForm: React.FC<WarningFormProps> = ({ accountId, onClose, onSuccess
               onChange={(e) => setFormData({...formData, warning_type: e.target.value as any})}
               className="w-full px-3 py-2 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-orange-500 outline-none"
             >
-              <option value="Teguran">Teguran Lisan</option>
-              <option value="SP1">Surat Peringatan 1 (SP1)</option>
-              <option value="SP2">Surat Peringatan 2 (SP2)</option>
-              <option value="SP3">Surat Peringatan 3 (SP3)</option>
+              <option value="Teguran Lisan">Teguran Lisan</option>
+              <option value="Surat Peringatan 1 (SP1)">Surat Peringatan 1 (SP1)</option>
+              <option value="Surat Peringatan 2 (SP2)">Surat Peringatan 2 (SP2)</option>
+              <option value="Surat Peringatan 3 (SP3)">Surat Peringatan 3 (SP3)</option>
             </select>
           </div>
 

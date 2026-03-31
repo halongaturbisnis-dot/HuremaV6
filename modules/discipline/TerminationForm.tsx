@@ -8,12 +8,21 @@ import { TerminationLogInput } from '../../types';
 
 interface TerminationFormProps {
   accountId: string;
+  initialData?: any;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-const TerminationForm: React.FC<TerminationFormProps> = ({ accountId, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState<TerminationLogInput>({
+const TerminationForm: React.FC<TerminationFormProps> = ({ accountId, initialData, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState<TerminationLogInput>(initialData ? {
+    account_id: initialData.account_id,
+    termination_type: initialData.termination_type,
+    termination_date: initialData.termination_date,
+    reason: initialData.reason || '',
+    severance_amount: initialData.severance_amount || 0,
+    penalty_amount: initialData.penalty_amount || 0,
+    file_id: initialData.file_id || ''
+  } : {
     account_id: accountId,
     termination_type: 'Resign',
     termination_date: new Date().toISOString().split('T')[0],
@@ -29,19 +38,24 @@ const TerminationForm: React.FC<TerminationFormProps> = ({ accountId, onClose, o
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const result = await Swal.fire({
-      title: 'Proses Karyawan Keluar?',
-      text: "Akun karyawan ini akan dinonaktifkan secara otomatis.",
+      title: initialData ? 'Simpan Perubahan?' : 'Proses Karyawan Keluar?',
+      text: initialData ? "Data pengakhiran akan diperbarui." : "Akun karyawan ini akan dinonaktifkan secara otomatis.",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      confirmButtonText: 'Ya, Proses Exit'
+      confirmButtonColor: initialData ? '#006E62' : '#ef4444',
+      confirmButtonText: initialData ? 'Ya, Simpan' : 'Ya, Proses Exit'
     });
 
     if (result.isConfirmed) {
       try {
         setIsSaving(true);
-        await disciplineService.createTermination(formData);
-        Swal.fire({ title: 'Berhasil!', text: 'Proses exit telah diselesaikan.', icon: 'success', timer: 1500, showConfirmButton: false });
+        if (initialData) {
+          await disciplineService.updateTermination(initialData.id, formData as any);
+          Swal.fire({ title: 'Berhasil!', text: 'Data pengakhiran telah diperbarui.', icon: 'success', timer: 1500, showConfirmButton: false });
+        } else {
+          await disciplineService.createTermination(formData);
+          Swal.fire({ title: 'Berhasil!', text: 'Proses exit telah diselesaikan.', icon: 'success', timer: 1500, showConfirmButton: false });
+        }
         onSuccess();
       } catch (error) {
         Swal.fire('Gagal', 'Terjadi kesalahan.', 'error');
@@ -91,7 +105,7 @@ const TerminationForm: React.FC<TerminationFormProps> = ({ accountId, onClose, o
                 className="w-full px-3 py-2 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-red-500 outline-none"
               >
                 <option value="Resign">Resign</option>
-                <option value="Pemecatan">Pemecatan / PHK</option>
+                <option value="Pemecatan / PHK">Pemecatan / PHK</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -118,13 +132,13 @@ const TerminationForm: React.FC<TerminationFormProps> = ({ accountId, onClose, o
             />
           </div>
 
-          {formData.termination_type === 'Pemecatan' ? (
+          {formData.termination_type === 'Pemecatan / PHK' ? (
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Uang Pesangon (IDR)</label>
               <input 
                 type="number"
                 value={formData.severance_amount}
-                onChange={(e) => setFormData({...formData, severance_amount: Number(e.target.value)})}
+                onChange={(e) => setFormData({...formData, severance_amount: Number(e.target.value), penalty_amount: 0})}
                 className="w-full px-3 py-2 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-red-500 outline-none bg-emerald-50/10 font-bold"
               />
             </div>
@@ -134,7 +148,7 @@ const TerminationForm: React.FC<TerminationFormProps> = ({ accountId, onClose, o
               <input 
                 type="number"
                 value={formData.penalty_amount}
-                onChange={(e) => setFormData({...formData, penalty_amount: Number(e.target.value)})}
+                onChange={(e) => setFormData({...formData, penalty_amount: Number(e.target.value), severance_amount: 0})}
                 className="w-full px-3 py-2 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-red-500 outline-none bg-orange-50/10 font-bold"
               />
             </div>

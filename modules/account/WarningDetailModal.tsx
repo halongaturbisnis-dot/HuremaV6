@@ -31,13 +31,11 @@ const WarningDetailModal: React.FC<WarningDetailModalProps> = ({ log, onClose, o
   const viewerUrl = log.file_id ? googleDriveService.getViewerUrl(log.file_id) : null;
 
   const getWarningColor = (type: string) => {
-    switch (type) {
-      case 'Teguran': return 'text-yellow-600 bg-yellow-50 border-yellow-100';
-      case 'SP1': return 'text-orange-600 bg-orange-50 border-orange-100';
-      case 'SP2': return 'text-red-500 bg-red-50 border-red-100';
-      case 'SP3': return 'text-red-700 bg-red-50 border-red-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-100';
-    }
+    if (type.includes('Teguran')) return 'text-yellow-600 bg-yellow-50 border-yellow-100';
+    if (type.includes('SP1')) return 'text-orange-600 bg-orange-50 border-orange-100';
+    if (type.includes('SP2')) return 'text-red-500 bg-red-50 border-red-100';
+    if (type.includes('SP3')) return 'text-red-700 bg-red-50 border-red-200';
+    return 'text-gray-600 bg-gray-50 border-gray-100';
   };
 
   return (

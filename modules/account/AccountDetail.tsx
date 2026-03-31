@@ -719,7 +719,7 @@ const AccountDetail: React.FC<AccountDetailProps> = ({ id, onClose, onEdit, onDe
                 <span className="text-[10px] font-bold text-gray-500">{formatDate(termination?.termination_date || account.end_date || '')}</span>
               </div>
               <DataRow label="Alasan Keluar" value={termination?.reason || 'Masa kontrak telah habis atau akun dinonaktifkan secara otomatis.'} />
-              {termination?.termination_type === 'Pemecatan' && (
+              {termination?.termination_type === 'Pemecatan / PHK' && (
                 <DataRow label="Uang Pesangon" value={formatCurrency(termination.severance_amount)} />
               )}
               {termination?.termination_type === 'Resign' && (

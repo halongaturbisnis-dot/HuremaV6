@@ -264,7 +264,7 @@ export interface AccountCertificationExtended extends AccountCertification {
 export interface WarningLog {
   id: string;
   account_id: string;
-  warning_type: 'Teguran' | 'SP1' | 'SP2' | 'SP3';
+  warning_type: 'Teguran Lisan' | 'Surat Peringatan 1 (SP1)' | 'Surat Peringatan 2 (SP2)' | 'Surat Peringatan 3 (SP3)';
   reason: string;
   issue_date: string;
   file_id?: string | null;
@@ -281,7 +281,7 @@ export interface WarningLogExtended extends WarningLog {
 export interface TerminationLog {
   id: string;
   account_id: string;
-  termination_type: 'Pemecatan' | 'Resign';
+  termination_type: 'Pemecatan / PHK' | 'Resign';
   termination_date: string;
   reason: string;
   severance_amount: number;
@@ -966,7 +966,7 @@ export type CompensationStatus = 'Pending' | 'Completed';
 export interface Compensation {
   id: string;
   account_id: string;
-  termination_type: 'Resign' | 'Pemecatan';
+  termination_type: 'Resign' | 'Pemecatan / PHK';
   termination_date: string;
   amount: number;
   type: 'Severance' | 'Penalty';

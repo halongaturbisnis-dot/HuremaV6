@@ -149,7 +149,7 @@ const CompensationMain: React.FC = () => {
                       <div className="text-xs text-gray-500">{c.account?.internal_nik}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${c.termination_type === 'Pemecatan' ? 'text-red-600' : 'text-orange-600'}`}>
+                      <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${c.termination_type === 'Pemecatan / PHK' ? 'text-red-600' : 'text-orange-600'}`}>
                         {c.termination_type}
                       </div>
                       <div className="text-sm text-gray-600">

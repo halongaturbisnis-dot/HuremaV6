@@ -142,8 +142,8 @@ export const disciplineService = {
         account_id: input.account_id,
         termination_type: input.termination_type,
         termination_date: input.termination_date,
-        amount: input.termination_type === 'Pemecatan' ? input.severance_amount : input.penalty_amount,
-        type: input.termination_type === 'Pemecatan' ? 'Severance' : 'Penalty',
+        amount: input.termination_type === 'Pemecatan / PHK' ? input.severance_amount : input.penalty_amount,
+        type: input.termination_type === 'Pemecatan / PHK' ? 'Severance' : 'Penalty',
         reason: input.reason
       });
     }
@@ -181,7 +181,6 @@ export const disciplineService = {
 
   // --- Import / Export ---
   async downloadWarningTemplate() {
-    // Optimasi: Hanya ambil data yang diperlukan saja untuk mencegah lag
     const { data: accounts, error } = await supabase
       .from('accounts')
       .select('id, internal_nik, full_name')
@@ -193,17 +192,51 @@ export const disciplineService = {
     const workbook = new ExcelJS.Workbook();
     const ws = workbook.addWorksheet('Warning_Import');
     
+    // Row 1: Headers
     ws.addRow(['Account ID (Hidden)', 'NIK Internal', 'Nama Karyawan', 'Jenis Peringatan (*)', 'Alasan (*)', 'Tanggal (YYYY-MM-DD) (*)', 'Link Surat G-Drive']);
-    ws.getRow(1).font = { bold: true };
+    
+    // Row 2: Descriptions
+    ws.addRow([
+      'ID Sistem (Jangan diubah)', 
+      'NIK Karyawan', 
+      'Nama Lengkap', 
+      'Pilih: Teguran Lisan, Surat Peringatan 1 (SP1), Surat Peringatan 2 (SP2), Surat Peringatan 3 (SP3)', 
+      'Alasan pemberian sanksi', 
+      'Format: YYYY-MM-DD', 
+      'Link file pendukung (opsional)'
+    ]);
 
+    // Row 3: Example
+    ws.addRow([
+      'uuid-example', 
+      'NIK001', 
+      'Contoh Nama', 
+      'Surat Peringatan 1 (SP1)', 
+      'Melanggar peraturan perusahaan pasal 5', 
+      new Date().toISOString().split('T')[0], 
+      'https://drive.google.com/...'
+    ]);
+
+    // Row 4 onwards: Data
     accounts?.forEach(acc => {
       ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', '']);
     });
 
-    const types = ['Teguran', 'SP1', 'SP2', 'SP3'];
-    const rowCount = ws.rowCount;
-    // Optimasi: Loop hanya pada baris yang memiliki data
-    for (let i = 2; i <= rowCount; i++) {
+    // Styling
+    const headerRow = ws.getRow(1);
+    headerRow.eachCell((cell) => {
+      const isMandatory = cell.value?.toString().includes('(*)');
+      cell.font = { bold: true, color: { argb: isMandatory ? 'FFFF0000' : 'FF000000' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+    });
+
+    const descRow = ws.getRow(2);
+    descRow.font = { italic: true, size: 10 };
+    descRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
+
+    const types = ['Teguran Lisan', 'Surat Peringatan 1 (SP1)', 'Surat Peringatan 2 (SP2)', 'Surat Peringatan 3 (SP3)'];
+    const totalRows = 3 + (accounts?.length || 0);
+    for (let i = 4; i <= totalRows; i++) {
       ws.getCell(`D${i}`).dataValidation = { 
         type: 'list', 
         allowBlank: true, 
@@ -231,8 +264,14 @@ export const disciplineService = {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-          const results = jsonData.map((row: any) => {
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { range: 0 }); // Read from start to get headers
+          
+          // Filter out description and example rows (row 2 and 3 in Excel are index 0 and 1 in JSON if range starts at 1, but sheet_to_json with headers uses row 1 as keys)
+          // Actually, sheet_to_json by default uses the first row as headers.
+          // So row 1 = headers. row 2 = first data row (description). row 3 = second data row (example). row 4 = third data row (actual data).
+          
+          const results = jsonData.slice(2).map((row: any) => {
             const parseDate = (val: any) => {
               if (typeof val === 'number') return new Date((val - 25569) * 86400 * 1000).toISOString().split('T')[0];
               return val;
@@ -285,16 +324,55 @@ export const disciplineService = {
     const workbook = new ExcelJS.Workbook();
     const ws = workbook.addWorksheet('Termination_Import');
     
+    // Row 1: Headers
     ws.addRow(['Account ID (Hidden)', 'NIK Internal', 'Nama Karyawan', 'Tipe Exit (*)', 'Tanggal Exit (YYYY-MM-DD) (*)', 'Alasan (*)', 'Uang Pesangon (PHK)', 'Biaya Penalti (Resign)', 'Link Dokumen G-Drive']);
-    ws.getRow(1).font = { bold: true };
+    
+    // Row 2: Descriptions
+    ws.addRow([
+      'ID Sistem (Jangan diubah)', 
+      'NIK Karyawan', 
+      'Nama Lengkap', 
+      'Pilih: Resign, Pemecatan / PHK', 
+      'Format: YYYY-MM-DD', 
+      'Alasan berhenti bekerja', 
+      'Jumlah pesangon (jika ada)', 
+      'Jumlah penalti (jika ada)', 
+      'Link file pendukung (opsional)'
+    ]);
 
+    // Row 3: Example
+    ws.addRow([
+      'uuid-example', 
+      'NIK002', 
+      'Contoh Nama', 
+      'Resign', 
+      new Date().toISOString().split('T')[0], 
+      'Mendapatkan tawaran di tempat lain', 
+      0, 
+      0, 
+      'https://drive.google.com/...'
+    ]);
+
+    // Row 4 onwards: Data
     accounts?.forEach(acc => {
       ws.addRow([acc.id, acc.internal_nik, acc.full_name, '', '', '', 0, 0, '']);
     });
 
-    const types = ['Resign', 'Pemecatan'];
-    const rowCount = ws.rowCount;
-    for (let i = 2; i <= rowCount; i++) {
+    // Styling
+    const headerRow = ws.getRow(1);
+    headerRow.eachCell((cell) => {
+      const isMandatory = cell.value?.toString().includes('(*)');
+      cell.font = { bold: true, color: { argb: isMandatory ? 'FFFF0000' : 'FF000000' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+    });
+
+    const descRow = ws.getRow(2);
+    descRow.font = { italic: true, size: 10 };
+    descRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
+
+    const types = ['Resign', 'Pemecatan / PHK'];
+    const totalRows = 3 + (accounts?.length || 0);
+    for (let i = 4; i <= totalRows; i++) {
       ws.getCell(`D${i}`).dataValidation = { 
         type: 'list', 
         allowBlank: true, 
@@ -322,8 +400,10 @@ export const disciplineService = {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-          const results = jsonData.map((row: any) => {
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { range: 0 });
+          
+          const results = jsonData.slice(2).map((row: any) => {
             const parseDate = (val: any) => {
               if (typeof val === 'number') return new Date((val - 25569) * 86400 * 1000).toISOString().split('T')[0];
               return val;
@@ -374,12 +454,13 @@ export const disciplineService = {
 
       // Create Compensation Record if amount > 0
       if (item.severance_amount > 0 || item.penalty_amount > 0) {
+        const isSeverance = item.termination_type === 'Pemecatan / PHK';
         await financeService.createCompensation({
           account_id: item.account_id,
           termination_type: item.termination_type,
           termination_date: item.termination_date,
-          amount: item.termination_type === 'Pemecatan' ? item.severance_amount : item.penalty_amount,
-          type: item.termination_type === 'Pemecatan' ? 'Severance' : 'Penalty',
+          amount: isSeverance ? item.severance_amount : item.penalty_amount,
+          type: isSeverance ? 'Severance' : 'Penalty',
           reason: item.reason
         });
       }
