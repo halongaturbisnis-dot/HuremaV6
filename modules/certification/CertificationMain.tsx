@@ -9,6 +9,7 @@ import LoadingSpinner from '../../components/Common/LoadingSpinner';
 import CertificationImportModal from './CertificationImportModal';
 import CertificationDetailModal from './CertificationDetailModal';
 import CertificationFormModal from './CertificationFormModal';
+import Pagination from '../../components/Common/Pagination';
 
 const CertificationMain: React.FC = () => {
   const [certs, setCerts] = useState<AccountCertificationExtended[]>([]);
@@ -20,23 +21,34 @@ const CertificationMain: React.FC = () => {
   const [selectedCert, setSelectedCert] = useState<AccountCertificationExtended | null>(null);
   const [editingCert, setEditingCert] = useState<AccountCertificationExtended | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'this_month'>('all');
+  
+  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
 
   useEffect(() => {
     fetchCerts();
-  }, []);
+  }, [currentPage, filterType]);
 
   const fetchCerts = async () => {
     try {
       setIsLoading(true);
-      const data = await certificationService.getAllGlobal();
+      const { data, count } = await certificationService.getAllGlobal(currentPage, PAGE_SIZE, searchTerm, filterType);
       setCerts(data);
+      setTotalCount(count);
     } catch (error) {
+      console.error('Error fetching certs:', error);
       Swal.fire('Gagal', 'Gagal memuat data sertifikasi', 'error');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchCerts();
   };
 
   const handleManualUpload = async (e: React.ChangeEvent<HTMLInputElement>, cert: AccountCertificationExtended) => {
@@ -56,23 +68,6 @@ const CertificationMain: React.FC = () => {
       setUploadingId(null);
     }
   };
-
-  const filteredCerts = certs.filter(c => {
-    const searchStr = `${c.account?.full_name} ${c.account?.internal_nik} ${c.cert_name} ${c.cert_type}`.toLowerCase();
-    const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
-    
-    if (filterType === 'this_month') {
-      const inputDate = new Date(c.entry_date);
-      const now = new Date();
-      const matchesMonth = inputDate.getMonth() === now.getMonth() && inputDate.getFullYear() === now.getFullYear();
-      return matchesSearch && matchesMonth;
-    }
-    
-    return matchesSearch;
-  });
-
-  const totalPages = Math.ceil(filteredCerts.length / itemsPerPage);
-  const paginatedCerts = filteredCerts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
@@ -147,10 +142,10 @@ const CertificationMain: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredCerts.length) {
+    if (selectedIds.length === certs.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredCerts.map(c => c.id));
+      setSelectedIds(certs.map(c => c.id));
     }
   };
 
@@ -160,44 +155,56 @@ const CertificationMain: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div 
-          onClick={() => setFilterType('all')}
+          onClick={() => {
+            setFilterType('all');
+            setCurrentPage(1);
+          }}
           className={`bg-white border p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all ${filterType === 'all' ? 'border-[#006E62] ring-1 ring-[#006E62]' : 'border-gray-100 hover:border-gray-300'}`}
         >
           <div className="p-3 bg-emerald-50 rounded-md text-[#006E62]"><Award size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Sertifikasi Terdata</p>
-            <p className="text-xl font-bold text-gray-800">{certs.length}</p>
+            <p className="text-xl font-bold text-gray-800">{filterType === 'all' ? totalCount : '-'}</p>
           </div>
         </div>
         <div 
-          onClick={() => setFilterType('this_month')}
+          onClick={() => {
+            setFilterType('this_month');
+            setCurrentPage(1);
+          }}
           className={`bg-white border p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all ${filterType === 'this_month' ? 'border-blue-600 ring-1 ring-blue-600' : 'border-gray-100 hover:border-gray-300'}`}
         >
           <div className="p-3 bg-blue-50 rounded-md text-blue-600"><Calendar size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Input Bulan Ini</p>
-            <p className="text-xl font-bold text-gray-800">
-              {certs.filter(c => {
-                const inputDate = new Date(c.entry_date);
-                const now = new Date();
-                return inputDate.getMonth() === now.getMonth() && inputDate.getFullYear() === now.getFullYear();
-              }).length}
-            </p>
+            <p className="text-xl font-bold text-gray-800">{filterType === 'this_month' ? totalCount : '-'}</p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
+        <form onSubmit={handleSearch} className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             placeholder="Cari sertifikasi (Nama Karyawan, Jenis, Nama Sertifikat)..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
+            className="w-full pl-10 pr-12 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setCurrentPage(1);
+                fetchCerts();
+              }
+            }}
           />
-        </div>
+          <button 
+            type="submit"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-[#006E62] transition-colors"
+          >
+            <Search size={16} />
+          </button>
+        </form>
         
         <div className="flex items-center gap-2">
           {selectedIds.length > 0 && (
@@ -222,7 +229,7 @@ const CertificationMain: React.FC = () => {
                 <input 
                   type="checkbox" 
                   className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                  checked={selectedIds.length === filteredCerts.length && filteredCerts.length > 0}
+                  checked={selectedIds.length === certs.length && certs.length > 0}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -235,10 +242,10 @@ const CertificationMain: React.FC = () => {
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               <tr><td colSpan={5} className="text-center py-20 text-gray-400">Memuat data sertifikasi...</td></tr>
-            ) : paginatedCerts.length === 0 ? (
+            ) : certs.length === 0 ? (
               <tr><td colSpan={5} className="text-center py-20 text-gray-400">Tidak ada data sertifikasi ditemukan.</td></tr>
             ) : (
-              paginatedCerts.map(c => {
+              certs.map(c => {
                 const isSelected = selectedIds.includes(c.id);
                 return (
                   <tr 
@@ -289,14 +296,14 @@ const CertificationMain: React.FC = () => {
                           className="p-1.5 text-[#006E62] hover:bg-emerald-50 rounded transition-colors"
                           title="Edit Sertifikasi"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={14} className="text-[#006E62]" />
                         </button>
                         <button 
                           onClick={() => handleDelete(c.id)}
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-colors"
                           title="Hapus Sertifikasi"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={14} className="text-[#ef4444]" />
                         </button>
                       </div>
                     </td>
@@ -308,41 +315,17 @@ const CertificationMain: React.FC = () => {
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white px-6 py-4 border border-gray-100 rounded-md shadow-sm">
-          <div className="text-xs text-gray-500">
-            Menampilkan <span className="font-bold text-gray-700">{((currentPage - 1) * itemsPerPage) + 1}</span> sampai <span className="font-bold text-gray-700">{Math.min(currentPage * itemsPerPage, filteredCerts.length)}</span> dari <span className="font-bold text-gray-700">{filteredCerts.length}</span> data
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1 border border-gray-200 rounded text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Sebelumnya
-            </button>
-            <div className="flex items-center gap-1">
-              {[...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i + 1}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-8 h-8 rounded text-xs font-bold transition-all ${currentPage === i + 1 ? 'bg-[#006E62] text-white shadow-md shadow-emerald-100' : 'text-gray-500 hover:bg-gray-50'}`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
-            <button 
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1 border border-gray-200 rounded text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Selanjutnya
-            </button>
-          </div>
+      <div className="mt-6 flex justify-between items-center bg-white p-4 rounded-md border border-gray-100 shadow-sm">
+        <div className="text-xs text-gray-500 font-medium">
+          Menampilkan <span className="text-[#006E62]">{certs.length}</span> dari <span className="text-[#006E62]">{totalCount}</span> data sertifikasi
         </div>
-      )}
+        <Pagination 
+          currentPage={currentPage}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
+      </div>
 
       {showImportModal && (
         <CertificationImportModal 

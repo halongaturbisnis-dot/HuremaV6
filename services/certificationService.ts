@@ -17,18 +17,35 @@ const sanitizePayload = (payload: any) => {
 };
 
 export const certificationService = {
-  async getAllGlobal() {
-    const { data, error } = await supabase
+  async getAllGlobal(page: number = 1, limit: number = 25, searchQuery: string = '', filterType: 'all' | 'this_month' = 'all') {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from('account_certifications')
       .select(`
         *,
-        account:accounts(full_name, internal_nik, role, access_code, photo_google_id)
-      `)
-      .order('entry_date', { ascending: false });
+        account:accounts!inner(full_name, internal_nik, role, access_code, photo_google_id)
+      `, { count: 'exact' })
+      .not('account.access_code', 'ilike', '%SPADMIN%');
+
+    if (searchQuery) {
+      query = query.or(`cert_name.ilike.%${searchQuery}%,cert_type.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+    }
+
+    if (filterType === 'this_month') {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+      query = query.gte('entry_date', firstDay).lte('entry_date', lastDay);
+    }
+
+    const { data, error, count } = await query
+      .order('entry_date', { ascending: false })
+      .range(from, to);
     
     if (error) throw error;
-    // Filter out logs where account access_code contains SPADMIN (case-insensitive)
-    return (data as any[]).filter(log => !log.account?.access_code?.toUpperCase().includes('SPADMIN')) as AccountCertificationExtended[];
+    return { data: data as AccountCertificationExtended[], count: count || 0 };
   },
 
   async getByAccountId(accountId: string) {

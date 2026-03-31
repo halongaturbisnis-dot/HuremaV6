@@ -19,14 +19,25 @@ const sanitizePayload = (payload: any) => {
 
 export const disciplineService = {
   // --- Warnings ---
-  async getWarningsAll() {
-    const { data, error } = await supabase
+  async getWarningsAll(page: number = 1, limit: number = 25, searchQuery: string = '') {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from('account_warning_logs')
-      .select('*, account:accounts(full_name, internal_nik, role, access_code, photo_google_id)')
-      .order('issue_date', { ascending: false });
+      .select('*, account:accounts!inner(full_name, internal_nik, role, access_code, photo_google_id)', { count: 'exact' })
+      .not('account.access_code', 'ilike', '%SPADMIN%');
+
+    if (searchQuery) {
+      query = query.or(`warning_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('issue_date', { ascending: false })
+      .range(from, to);
+
     if (error) throw error;
-    // Filter out logs where account access_code contains SPADMIN (case-insensitive)
-    return (data as any[]).filter(log => !log.account?.access_code?.toUpperCase().includes('SPADMIN')) as WarningLogExtended[];
+    return { data: data as WarningLogExtended[], count: count || 0 };
   },
 
   async getWarningsByAccountId(accountId: string) {
@@ -103,14 +114,25 @@ export const disciplineService = {
   },
 
   // --- Terminations ---
-  async getTerminationsAll() {
-    const { data, error } = await supabase
+  async getTerminationsAll(page: number = 1, limit: number = 25, searchQuery: string = '') {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from('account_termination_logs')
-      .select('*, account:accounts(full_name, internal_nik, role, access_code, photo_google_id)')
-      .order('termination_date', { ascending: false });
+      .select('*, account:accounts!inner(full_name, internal_nik, role, access_code, photo_google_id)', { count: 'exact' })
+      .not('account.access_code', 'ilike', '%SPADMIN%');
+
+    if (searchQuery) {
+      query = query.or(`termination_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('termination_date', { ascending: false })
+      .range(from, to);
+
     if (error) throw error;
-    // Filter out logs where account access_code contains SPADMIN (case-insensitive)
-    return (data as any[]).filter(log => !log.account?.access_code?.toUpperCase().includes('SPADMIN')) as TerminationLogExtended[];
+    return { data: data as TerminationLogExtended[], count: count || 0 };
   },
 
   async getTerminationByAccountId(accountId: string) {

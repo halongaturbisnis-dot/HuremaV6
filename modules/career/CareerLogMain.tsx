@@ -9,6 +9,7 @@ import CareerImportModal from './CareerImportModal';
 import CareerDetailModal from '../account/CareerDetailModal';
 import LogForm from '../account/LogForm';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
+import Pagination from '../../components/Common/Pagination';
 
 const CareerLogMain: React.FC = () => {
   const [logs, setLogs] = useState<CareerLogExtended[]>([]);
@@ -20,20 +21,32 @@ const CareerLogMain: React.FC = () => {
   const [selectedLog, setSelectedLog] = useState<CareerLogExtended | null>(null);
   const [editingLog, setEditingLog] = useState<CareerLogExtended | null>(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
+
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [currentPage]);
 
   const fetchLogs = async () => {
     try {
       setIsLoading(true);
-      const data = await careerService.getAllGlobal();
+      const { data, count } = await careerService.getAllGlobal(currentPage, PAGE_SIZE, searchTerm);
       setLogs(data);
+      setTotalCount(count);
     } catch (error) {
       Swal.fire('Gagal', 'Gagal memuat log karir', 'error');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchLogs();
   };
 
   const handleManualUploadSK = async (e: React.ChangeEvent<HTMLInputElement>, log: CareerLogExtended) => {
@@ -131,10 +144,10 @@ const CareerLogMain: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredLogs.length) {
+    if (selectedIds.length === logs.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredLogs.map(l => l.id));
+      setSelectedIds(logs.map(l => l.id));
     }
   };
 
@@ -159,16 +172,28 @@ const CareerLogMain: React.FC = () => {
       {uploadingId && <LoadingSpinner message="Mengunggah SK..." />}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
+        <form onSubmit={handleSearch} className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             placeholder="Cari log (Nama, NIK, Jabatan, Lokasi)..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
+            className="w-full pl-10 pr-12 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setCurrentPage(1);
+                fetchLogs();
+              }
+            }}
           />
-        </div>
+          <button 
+            type="submit"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-[#006E62] transition-colors"
+          >
+            <Search size={16} />
+          </button>
+        </form>
         
         <div className="flex items-center gap-2">
           {selectedIds.length > 0 && (
@@ -196,7 +221,7 @@ const CareerLogMain: React.FC = () => {
                 <input 
                   type="checkbox" 
                   className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                  checked={selectedIds.length === filteredLogs.length && filteredLogs.length > 0}
+                  checked={selectedIds.length === logs.length && logs.length > 0}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -210,10 +235,10 @@ const CareerLogMain: React.FC = () => {
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               <tr><td colSpan={6} className="text-center py-20 text-gray-400">Memuat data log...</td></tr>
-            ) : filteredLogs.length === 0 ? (
+            ) : logs.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-20 text-gray-400">Tidak ada log karir ditemukan.</td></tr>
             ) : (
-              filteredLogs.map(log => {
+              logs.map(log => {
                 const isSelected = selectedIds.includes(log.id);
                 return (
                   <tr 
@@ -266,14 +291,14 @@ const CareerLogMain: React.FC = () => {
                           className="p-1.5 text-[#006E62] hover:bg-emerald-50 rounded transition-colors"
                           title="Edit Log"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={14} className="text-[#006E62]" />
                         </button>
                         <button 
                           onClick={() => handleDelete(log.id)}
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-colors"
                           title="Hapus Log"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={14} className="text-[#ef4444]" />
                         </button>
                       </div>
                     </td>
@@ -284,6 +309,13 @@ const CareerLogMain: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      <Pagination 
+        currentPage={currentPage}
+        totalCount={totalCount}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+      />
 
       {showImportModal && (
         <CareerImportModal 

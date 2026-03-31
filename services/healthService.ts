@@ -6,18 +6,28 @@ import { saveAs } from 'file-saver';
 import { accountService } from './accountService';
 
 export const healthService = {
-  async getAllGlobal() {
-    const { data, error } = await supabase
+  async getAllGlobal(page: number = 1, limit: number = 25, searchQuery: string = '') {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from('account_health_logs')
       .select(`
         *,
-        account:accounts(full_name, internal_nik, role, access_code, photo_google_id)
-      `)
-      .order('change_date', { ascending: false });
+        account:accounts!inner(full_name, internal_nik, role, access_code, photo_google_id)
+      `, { count: 'exact' })
+      .not('account.access_code', 'ilike', '%SPADMIN%');
+
+    if (searchQuery) {
+      query = query.or(`mcu_status.ilike.%${searchQuery}%,health_risk.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('change_date', { ascending: false })
+      .range(from, to);
     
     if (error) throw error;
-    // Filter out logs where account access_code contains SPADMIN (case-insensitive)
-    return (data as any[]).filter(log => !log.account?.access_code?.toUpperCase().includes('SPADMIN')) as HealthLogExtended[];
+    return { data: data as HealthLogExtended[], count: count || 0 };
   },
 
   async downloadTemplate() {

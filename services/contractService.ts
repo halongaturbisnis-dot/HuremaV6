@@ -17,18 +17,38 @@ const sanitizePayload = (payload: any) => {
 };
 
 export const contractService = {
-  async getAllGlobal() {
-    const { data, error } = await supabase
+  async getAllGlobal(page: number = 1, limit: number = 25, searchQuery: string = '', filterType: 'all' | 'ending_soon' | 'expired' = 'all') {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from('account_contracts')
       .select(`
         *,
-        account:accounts(full_name, internal_nik, role, access_code, photo_google_id)
-      `)
-      .order('created_at', { ascending: false });
+        account:accounts!inner(full_name, internal_nik, role, access_code, photo_google_id)
+      `, { count: 'exact' })
+      .not('account.access_code', 'ilike', '%SPADMIN%');
+
+    if (searchQuery) {
+      query = query.or(`contract_number.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (filterType === 'ending_soon') {
+      const thirtyDaysLater = new Date();
+      thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
+      const thirtyDaysLaterStr = thirtyDaysLater.toISOString().split('T')[0];
+      query = query.gte('end_date', today).lte('end_date', thirtyDaysLaterStr);
+    } else if (filterType === 'expired') {
+      query = query.lt('end_date', today);
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
     
     if (error) throw error;
-    // Filter out logs where account access_code contains SPADMIN (case-insensitive)
-    return (data as any[]).filter(log => !log.account?.access_code?.toUpperCase().includes('SPADMIN')) as AccountContractExtended[];
+    return { data: data as AccountContractExtended[], count: count || 0 };
   },
 
   async getByAccountId(accountId: string) {

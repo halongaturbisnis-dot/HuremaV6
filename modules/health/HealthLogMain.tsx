@@ -10,6 +10,7 @@ import LoadingSpinner from '../../components/Common/LoadingSpinner';
 import HealthImportModal from './HealthImportModal';
 import HealthDetailModal from '../account/HealthDetailModal';
 import LogForm from '../account/LogForm';
+import Pagination from '../../components/Common/Pagination';
 
 const HealthLogMain: React.FC = () => {
   const [logs, setLogs] = useState<HealthLogExtended[]>([]);
@@ -20,23 +21,33 @@ const HealthLogMain: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<HealthLogExtended | null>(null);
   const [editingLog, setEditingLog] = useState<HealthLogExtended | null>(null);
+  
+  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [currentPage]);
 
   const fetchLogs = async () => {
     try {
       setIsLoading(true);
-      const data = await healthService.getAllGlobal();
+      const { data, count } = await healthService.getAllGlobal(currentPage, PAGE_SIZE, searchTerm);
       setLogs(data);
+      setTotalCount(count);
     } catch (error) {
       Swal.fire('Gagal', 'Gagal memuat log kesehatan', 'error');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchLogs();
   };
 
   const handleManualUploadMCU = async (e: React.ChangeEvent<HTMLInputElement>, log: HealthLogExtended) => {
@@ -56,18 +67,6 @@ const HealthLogMain: React.FC = () => {
       setUploadingId(null);
     }
   };
-
-  const filteredLogs = logs.filter(log => {
-    const searchStr = `${log.account?.full_name} ${log.account?.internal_nik} ${log.mcu_status} ${log.health_risk}`.toLowerCase();
-    return searchStr.includes(searchTerm.toLowerCase());
-  });
-
-  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
-  const paginatedLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('id-ID', {
@@ -141,10 +140,10 @@ const HealthLogMain: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredLogs.length) {
+    if (selectedIds.length === logs.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredLogs.map(l => l.id));
+      setSelectedIds(logs.map(l => l.id));
     }
   };
 
@@ -153,16 +152,28 @@ const HealthLogMain: React.FC = () => {
       {uploadingId && <LoadingSpinner message="Mengunggah Dokumen..." />}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
+        <form onSubmit={handleSearch} className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             placeholder="Cari log (Nama, NIK, Status MCU)..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
+            className="w-full pl-10 pr-12 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setCurrentPage(1);
+                fetchLogs();
+              }
+            }}
           />
-        </div>
+          <button 
+            type="submit"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-[#006E62] transition-colors"
+          >
+            <Search size={16} />
+          </button>
+        </form>
         
         <div className="flex items-center gap-2">
           {selectedIds.length > 0 && (
@@ -190,7 +201,7 @@ const HealthLogMain: React.FC = () => {
                 <input 
                   type="checkbox" 
                   className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                  checked={selectedIds.length === filteredLogs.length && filteredLogs.length > 0}
+                  checked={selectedIds.length === logs.length && logs.length > 0}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -204,10 +215,10 @@ const HealthLogMain: React.FC = () => {
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               <tr><td colSpan={6} className="text-center py-20 text-gray-400">Memuat data log kesehatan...</td></tr>
-            ) : paginatedLogs.length === 0 ? (
+            ) : logs.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-20 text-gray-400">Tidak ada log kesehatan ditemukan.</td></tr>
             ) : (
-              paginatedLogs.map(log => {
+              logs.map(log => {
                 const isSelected = selectedIds.includes(log.id);
                 return (
                   <tr 
@@ -257,17 +268,17 @@ const HealthLogMain: React.FC = () => {
                       <div className="flex items-center justify-end gap-2">
                         <button 
                           onClick={() => setEditingLog(log)}
-                          className="p-1.5 text-gray-400 hover:text-[#006E62] hover:bg-emerald-50 rounded transition-all"
+                          className="p-1.5 text-[#006E62] hover:bg-emerald-50 rounded transition-all"
                           title="Edit"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={14} className="text-[#006E62]" />
                         </button>
                         <button 
                           onClick={() => handleDelete(log.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-all"
                           title="Hapus"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={14} className="text-[#ef4444]" />
                         </button>
                       </div>
                     </td>
@@ -279,52 +290,12 @@ const HealthLogMain: React.FC = () => {
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between bg-white px-6 py-3 rounded-md border border-gray-100 shadow-sm font-sans">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredLogs.length)} dari {filteredLogs.length} data
-          </p>
-          <div className="flex items-center gap-1">
-            <button 
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            {[...Array(totalPages)].map((_, i) => {
-              // Show limited page buttons if many pages
-              if (totalPages > 7) {
-                if (i + 1 !== 1 && i + 1 !== totalPages && (i + 1 < currentPage - 1 || i + 1 > currentPage + 1)) {
-                  if (i + 1 === currentPage - 2 || i + 1 === currentPage + 2) return <span key={i} className="px-1 text-gray-300">...</span>;
-                  return null;
-                }
-              }
-              return (
-                <button
-                  key={i + 1}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-8 h-8 text-[10px] font-bold rounded transition-all ${
-                    currentPage === i + 1 
-                      ? 'bg-[#006E62] text-white shadow-md shadow-emerald-100' 
-                      : 'text-gray-400 hover:bg-gray-50 border border-transparent hover:border-gray-200'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              );
-            })}
-            <button 
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination 
+        currentPage={currentPage}
+        totalCount={totalCount}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+      />
 
       {showImportModal && (
         <HealthImportModal 

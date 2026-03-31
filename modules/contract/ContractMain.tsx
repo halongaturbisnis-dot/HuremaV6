@@ -8,6 +8,7 @@ import { AccountContractExtended } from '../../types';
 import ContractImportModal from './ContractImportModal';
 import ContractDetailModal from './ContractDetailModal';
 import ContractFormModal from './ContractFormModal';
+import Pagination from '../../components/Common/Pagination';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
 
 const ContractMain: React.FC = () => {
@@ -20,54 +21,26 @@ const ContractMain: React.FC = () => {
   const [editingContract, setEditingContract] = useState<AccountContractExtended | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'ending_soon' | 'expired'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
 
   useEffect(() => {
     fetchContracts();
-  }, []);
+  }, [currentPage, filterType]);
 
-  const fetchContracts = async () => {
+  const fetchContracts = async (search: string = searchTerm) => {
     try {
       setIsLoading(true);
-      const data = await contractService.getAllGlobal();
+      const { data, count } = await contractService.getAllGlobal(currentPage, PAGE_SIZE, search, filterType);
       setContracts(data);
+      setTotalCount(count);
     } catch (error) {
+      console.error('Error fetching contracts:', error);
       Swal.fire('Gagal', 'Gagal memuat data kontrak', 'error');
     } finally {
       setIsLoading(false);
     }
   };
-
-
-  const filteredContracts = contracts.filter(c => {
-    const searchStr = `${c.account?.full_name} ${c.account?.internal_nik} ${c.contract_number} ${c.contract_type}`.toLowerCase();
-    const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
-    
-    if (!matchesSearch) return false;
-
-    if (filterType === 'ending_soon') {
-      if (!c.end_date) return false;
-      const diff = (new Date(c.end_date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-      return diff >= 0 && diff < 30;
-    }
-    
-    if (filterType === 'expired') {
-      return c.end_date && new Date(c.end_date) < new Date();
-    }
-
-    return true;
-  });
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredContracts.length / itemsPerPage);
-  const paginatedContracts = filteredContracts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, filterType]);
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
@@ -154,10 +127,10 @@ const ContractMain: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === paginatedContracts.length) {
+    if (selectedIds.length === contracts.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(paginatedContracts.map(c => c.id));
+      setSelectedIds(contracts.map(c => c.id));
     }
   };
 
@@ -165,55 +138,65 @@ const ContractMain: React.FC = () => {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div 
-          onClick={() => setFilterType('all')}
+          onClick={() => { setFilterType('all'); setCurrentPage(1); }}
           className={`p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all border ${filterType === 'all' ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
         >
           <div className={`p-3 rounded-md ${filterType === 'all' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}><FileText size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase">Total Kontrak Terdata</p>
-            <p className="text-xl font-bold text-gray-800">{contracts.length}</p>
+            <p className="text-xl font-bold text-gray-800">{filterType === 'all' ? totalCount : '-'}</p>
           </div>
         </div>
         <div 
-          onClick={() => setFilterType('ending_soon')}
+          onClick={() => { setFilterType('ending_soon'); setCurrentPage(1); }}
           className={`p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all border ${filterType === 'ending_soon' ? 'bg-orange-50 border-orange-200 ring-2 ring-orange-100' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
         >
           <div className={`p-3 rounded-md ${filterType === 'ending_soon' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-600'}`}><AlertCircle size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase">Akan Berakhir (30 Hari)</p>
-            <p className="text-xl font-bold text-gray-800">
-              {contracts.filter(c => {
-                if (!c.end_date) return false;
-                const diff = (new Date(c.end_date).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
-                return diff >= 0 && diff < 30;
-              }).length}
-            </p>
+            <p className="text-xl font-bold text-gray-800">{filterType === 'ending_soon' ? totalCount : '-'}</p>
           </div>
         </div>
         <div 
-          onClick={() => setFilterType('expired')}
+          onClick={() => { setFilterType('expired'); setCurrentPage(1); }}
           className={`p-4 rounded-md shadow-sm flex items-center gap-4 cursor-pointer transition-all border ${filterType === 'expired' ? 'bg-red-50 border-red-200 ring-2 ring-red-100' : 'bg-white border-gray-100 hover:bg-gray-50'}`}
         >
           <div className={`p-3 rounded-md ${filterType === 'expired' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600'}`}><Calendar size={24} /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase">Sudah Kadaluarsa</p>
-            <p className="text-xl font-bold text-gray-800">
-              {contracts.filter(c => c.end_date && new Date(c.end_date) < new Date()).length}
-            </p>
+            <p className="text-xl font-bold text-gray-800">{filterType === 'expired' ? totalCount : '-'}</p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Cari kontrak (Nama, NIK, No Kontrak)..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="relative flex-1 max-w-md flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Cari kontrak (Nama, NIK, No Kontrak)..."
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] text-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setCurrentPage(1);
+                  fetchContracts(searchTerm);
+                }
+              }}
+            />
+          </div>
+          <button
+            onClick={() => {
+              setCurrentPage(1);
+              fetchContracts(searchTerm);
+            }}
+            className="bg-[#006E62] text-white p-2 rounded-md hover:bg-[#005a50] transition-colors"
+            title="Cari"
+          >
+            <Search size={18} />
+          </button>
         </div>
         
         <div className="flex items-center gap-2">
@@ -242,7 +225,7 @@ const ContractMain: React.FC = () => {
                 <input 
                   type="checkbox" 
                   className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                  checked={selectedIds.length === paginatedContracts.length && paginatedContracts.length > 0}
+                  checked={selectedIds.length === contracts.length && contracts.length > 0}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -256,10 +239,10 @@ const ContractMain: React.FC = () => {
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               <tr><td colSpan={6} className="text-center py-20 text-gray-400">Memuat data kontrak...</td></tr>
-            ) : paginatedContracts.length === 0 ? (
+            ) : contracts.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-20 text-gray-400">Tidak ada data kontrak ditemukan.</td></tr>
             ) : (
-              paginatedContracts.map(c => {
+              contracts.map(c => {
                 const isSelected = selectedIds.includes(c.id);
                 return (
                   <tr 
@@ -312,14 +295,14 @@ const ContractMain: React.FC = () => {
                           className="p-1.5 text-[#006E62] hover:bg-emerald-50 rounded transition-colors"
                           title="Edit Kontrak"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={14} className="text-[#006E62]" />
                         </button>
                         <button 
                           onClick={() => handleDelete(c.id)}
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-colors"
                           title="Hapus Kontrak"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={14} className="text-[#ef4444]" />
                         </button>
                       </div>
                     </td>
@@ -331,39 +314,17 @@ const ContractMain: React.FC = () => {
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white px-6 py-4 border border-gray-100 rounded-md shadow-sm">
-          <div className="text-xs text-gray-500">
-            Menampilkan <span className="font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> - <span className="font-bold">{Math.min(currentPage * itemsPerPage, filteredContracts.length)}</span> dari <span className="font-bold">{filteredContracts.length}</span> data
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(prev => prev - 1)}
-              className="p-2 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <X size={16} className="rotate-180" />
-            </button>
-            {[...Array(totalPages)].map((_, i) => (
-              <button
-                key={i + 1}
-                onClick={() => setCurrentPage(i + 1)}
-                className={`w-8 h-8 text-xs font-bold rounded transition-all ${currentPage === i + 1 ? 'bg-[#006E62] text-white shadow-md' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-              >
-                {i + 1}
-              </button>
-            ))}
-            <button
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(prev => prev + 1)}
-              className="p-2 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <X size={16} />
-            </button>
-          </div>
+      <div className="mt-6 flex justify-between items-center bg-white p-4 rounded-md border border-gray-100 shadow-sm">
+        <div className="text-xs text-gray-500 font-medium">
+          Menampilkan <span className="text-[#006E62]">{contracts.length}</span> dari <span className="text-[#006E62]">{totalCount}</span> data kontrak
         </div>
-      )}
+        <Pagination 
+          currentPage={currentPage}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
+      </div>
 
       {showImportModal && (
         <ContractImportModal 

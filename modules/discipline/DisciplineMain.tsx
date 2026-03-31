@@ -10,6 +10,7 @@ import WarningDetailModal from '../account/WarningDetailModal';
 import TerminationDetailModal from '../account/TerminationDetailModal';
 import WarningForm from './WarningForm';
 import TerminationForm from './TerminationForm';
+import Pagination from '../../components/Common/Pagination';
 
 const DisciplineMain: React.FC = () => {
   const [warnings, setWarnings] = useState<WarningLogExtended[]>([]);
@@ -25,24 +26,38 @@ const DisciplineMain: React.FC = () => {
   const [selectedTermination, setSelectedTermination] = useState<TerminationLogExtended | null>(null);
   const [editingTermination, setEditingTermination] = useState<TerminationLogExtended | null>(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
+
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [activeTab, currentPage]);
 
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [w, t] = await Promise.all([
-        disciplineService.getWarningsAll(),
-        disciplineService.getTerminationsAll()
-      ]);
-      setWarnings(w);
-      setTerminations(t);
+      if (activeTab === 'warnings') {
+        const { data, count } = await disciplineService.getWarningsAll(currentPage, PAGE_SIZE, searchTerm);
+        setWarnings(data);
+        setTotalCount(count);
+      } else {
+        const { data, count } = await disciplineService.getTerminationsAll(currentPage, PAGE_SIZE, searchTerm);
+        setTerminations(data);
+        setTotalCount(count);
+      }
     } catch (error) {
       Swal.fire('Gagal', 'Gagal memuat data kedisiplinan', 'error');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchData();
   };
 
   const handleDeleteWarning = async (id: string) => {
@@ -142,7 +157,7 @@ const DisciplineMain: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    const currentList = activeTab === 'warnings' ? filteredWarnings : filteredTerminations;
+    const currentList = activeTab === 'warnings' ? warnings : terminations;
     if (selectedIds.length === currentList.length) {
       setSelectedIds([]);
     } else {
@@ -153,15 +168,8 @@ const DisciplineMain: React.FC = () => {
   const handleTabChange = (tab: 'warnings' | 'terminations') => {
     setActiveTab(tab);
     setSelectedIds([]);
+    setCurrentPage(1);
   };
-
-  const filteredWarnings = warnings.filter(w => 
-    `${w.account?.full_name} ${w.account?.internal_nik} ${w.warning_type} ${w.reason}`.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredTerminations = terminations.filter(t => 
-    `${t.account?.full_name} ${t.account?.internal_nik} ${t.termination_type} ${t.reason}`.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -210,16 +218,31 @@ const DisciplineMain: React.FC = () => {
         </div>
       </div>
 
-      <div className="relative max-w-md">
-        <ShieldAlert className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-        <input
-          type="text"
-          placeholder="Cari data..."
-          className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#006E62] text-sm"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
+      <form onSubmit={handleSearch} className="relative max-w-md flex gap-2">
+        <div className="relative flex-1">
+          <ShieldAlert className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            placeholder="Cari data..."
+            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#006E62] text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setCurrentPage(1);
+                fetchData();
+              }
+            }}
+          />
+        </div>
+        <button
+          type="submit"
+          className="bg-[#006E62] text-white p-2 rounded-md hover:bg-[#005a50] transition-colors"
+          title="Cari"
+        >
+          <Search size={18} />
+        </button>
+      </form>
 
       <div className="bg-white border border-gray-100 rounded-md overflow-hidden shadow-sm">
         {activeTab === 'warnings' ? (
@@ -230,7 +253,7 @@ const DisciplineMain: React.FC = () => {
                   <input 
                     type="checkbox" 
                     className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                    checked={selectedIds.length === filteredWarnings.length && filteredWarnings.length > 0}
+                    checked={selectedIds.length === warnings.length && warnings.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </th>
@@ -242,7 +265,7 @@ const DisciplineMain: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {isLoading ? <tr><td colSpan={6} className="py-20 text-center text-gray-400">Memuat...</td></tr> : filteredWarnings.map(w => {
+              {isLoading ? <tr><td colSpan={6} className="py-20 text-center text-gray-400">Memuat...</td></tr> : warnings.length === 0 ? <tr><td colSpan={6} className="py-20 text-center text-gray-400">Tidak ada data ditemukan.</td></tr> : warnings.map(w => {
                 const isSelected = selectedIds.includes(w.id);
                 return (
                   <tr 
@@ -290,14 +313,14 @@ const DisciplineMain: React.FC = () => {
                           className="p-1.5 text-[#006E62] hover:bg-emerald-50 rounded transition-colors"
                           title="Edit Peringatan"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={14} className="text-[#006E62]" />
                         </button>
                         <button 
                           onClick={() => handleDeleteWarning(w.id)} 
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-colors"
                           title="Hapus Peringatan"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={14} className="text-[#ef4444]" />
                         </button>
                       </div>
                     </td>
@@ -314,7 +337,7 @@ const DisciplineMain: React.FC = () => {
                   <input 
                     type="checkbox" 
                     className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                    checked={selectedIds.length === filteredTerminations.length && filteredTerminations.length > 0}
+                    checked={selectedIds.length === terminations.length && terminations.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </th>
@@ -327,7 +350,7 @@ const DisciplineMain: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {isLoading ? <tr><td colSpan={7} className="py-20 text-center text-gray-400">Memuat...</td></tr> : filteredTerminations.map(t => {
+              {isLoading ? <tr><td colSpan={7} className="py-20 text-center text-gray-400">Memuat...</td></tr> : terminations.length === 0 ? <tr><td colSpan={7} className="py-20 text-center text-gray-400">Tidak ada data ditemukan.</td></tr> : terminations.map(t => {
                 const isSelected = selectedIds.includes(t.id);
                 return (
                   <tr 
@@ -380,14 +403,14 @@ const DisciplineMain: React.FC = () => {
                           className="p-1.5 text-[#006E62] hover:bg-emerald-50 rounded transition-colors"
                           title="Edit Pengakhiran"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={14} className="text-[#006E62]" />
                         </button>
                         <button 
                           onClick={() => handleDeleteTermination(t.id, t.account_id)} 
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-colors"
                           title="Hapus Pengakhiran"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={14} className="text-[#ef4444]" />
                         </button>
                       </div>
                     </td>
@@ -452,6 +475,17 @@ const DisciplineMain: React.FC = () => {
           onSuccess={() => { setEditingTermination(null); fetchData(); }} 
         />
       )}
+      <div className="mt-6 flex justify-between items-center bg-white p-4 rounded-md border border-gray-100 shadow-sm">
+        <div className="text-xs text-gray-500 font-medium">
+          Menampilkan <span className="text-[#006E62]">{activeTab === 'warnings' ? warnings.length : terminations.length}</span> dari <span className="text-[#006E62]">{totalCount}</span> data {activeTab === 'warnings' ? 'peringatan' : 'pengakhiran'}
+        </div>
+        <Pagination 
+          currentPage={currentPage}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
+      </div>
     </div>
   );
 };

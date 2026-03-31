@@ -40,21 +40,44 @@ const sanitizePayload = (payload: any) => {
 };
 
 export const accountService = {
-  async getAll() {
-    const { data, error } = await supabase
+  async getAll(page?: number, limit?: number, searchQuery: string = '', statusFilter?: 'aktif' | 'non-aktif'): Promise<any> {
+    let query = supabase
       .from('accounts')
       .select(`
         *,
         location:locations(name)
-      `)
-      .not('access_code', 'ilike', '%SPADMIN%')
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' })
+      .not('access_code', 'ilike', '%SPADMIN%');
+
+    if (searchQuery) {
+      query = query.or(`full_name.ilike.%${searchQuery}%,internal_nik.ilike.%${searchQuery}%,position.ilike.%${searchQuery}%`);
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (statusFilter === 'aktif') {
+      query = query.or(`end_date.is.null,end_date.gt.${today}`);
+    } else if (statusFilter === 'non-aktif') {
+      query = query.not('end_date', 'is', null).lte('end_date', today);
+    }
+
+    if (page !== undefined && limit !== undefined) {
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+    }
+
+    const { data, error, count } = await query
+      .order('full_name', { ascending: true });
     
     if (error) {
       console.error("SUPABASE_GET_ALL_ERROR:", error.message);
       throw error;
     }
-    return data;
+
+    if (page !== undefined && limit !== undefined) {
+      return { data: data as Account[], count: count || 0 };
+    }
+    return data as Account[];
   },
 
   async getById(id: string) {

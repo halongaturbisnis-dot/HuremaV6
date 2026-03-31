@@ -19,6 +19,7 @@ import { Account, AccountInput, AuthUser, SalaryScheme } from '../../types';
 import AccountForm from './AccountForm';
 import AccountDetail from './AccountDetail';
 import AccountImportModal from './AccountImportModal';
+import Pagination from '../../components/Common/Pagination';
 import { CardSkeleton } from '../../components/Common/Skeleton';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
 import { googleDriveService } from '../../services/googleDriveService';
@@ -45,6 +46,9 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'aktif' | 'non-aktif'>('aktif');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 25;
   const [showForm, setShowForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -63,7 +67,7 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
     } else {
       fetchAccounts();
     }
-  }, [isSelfProfile, user]);
+  }, [isSelfProfile, user, currentPage, statusFilter]);
 
   const fetchSelfAccount = async () => {
     if (!user) return;
@@ -84,11 +88,12 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
     }
   };
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = async (search: string = searchTerm) => {
     try {
       setIsLoading(true);
-      const data = await accountService.getAll();
-      setAccounts(data as any);
+      const { data, count } = await accountService.getAll(currentPage, PAGE_SIZE, search, statusFilter);
+      setAccounts(data);
+      setTotalCount(count);
     } catch (error) {
       Swal.fire('Gagal', 'Gagal memuat data akun', 'error');
     } finally {
@@ -307,23 +312,15 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredAccounts.length) {
+    if (selectedIds.length === accounts.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredAccounts.map(acc => acc.id));
+      setSelectedIds(accounts.map(acc => acc.id));
     }
   };
 
   const today = new Date().toISOString().split('T')[0];
   
-  const activeAccounts = accounts.filter(acc => !acc.end_date || acc.end_date > today);
-  const inactiveAccounts = accounts.filter(acc => acc.end_date && acc.end_date <= today);
-
-  const filteredAccounts = (statusFilter === 'aktif' ? activeAccounts : inactiveAccounts).filter(acc => {
-    const searchStr = (acc.search_all || `${acc.full_name} ${acc.internal_nik} ${acc.position}`).toLowerCase();
-    return searchStr.includes(searchTerm.toLowerCase());
-  });
-
   // Halaman Detail
   if (selectedAccountId) {
     return (
@@ -544,15 +541,33 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
       {activeSubTab === 'data' ? (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Cari (Nama, NIK, Jabatan)..."
-                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] focus:border-transparent transition-all text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="relative flex-1 max-w-md flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Cari (Nama, NIK, Jabatan)..."
+                  className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006E62] focus:border-transparent transition-all text-sm"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setCurrentPage(1);
+                      fetchAccounts(searchTerm);
+                    }
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setCurrentPage(1);
+                  fetchAccounts(searchTerm);
+                }}
+                className="bg-[#006E62] text-white p-2 rounded-md hover:bg-[#005a50] transition-colors"
+                title="Cari"
+              >
+                <Search size={18} />
+              </button>
             </div>
             
             <div className="flex items-center gap-2">
@@ -586,22 +601,22 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
 
           <div className="flex border-b border-gray-100">
             <button
-              onClick={() => setStatusFilter('aktif')}
+              onClick={() => { setStatusFilter('aktif'); setCurrentPage(1); }}
               className={`px-6 py-3 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 ${
                 statusFilter === 'aktif' ? 'border-[#006E62] text-[#006E62]' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
               <UserCheck size={14} />
-              Karyawan Aktif <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] ${statusFilter === 'aktif' ? 'bg-[#006E62] text-white' : 'bg-gray-100 text-gray-400'}`}>{activeAccounts.length}</span>
+              Karyawan Aktif {statusFilter === 'aktif' && <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] bg-[#006E62] text-white`}>{totalCount}</span>}
             </button>
             <button
-              onClick={() => setStatusFilter('non-aktif')}
+              onClick={() => { setStatusFilter('non-aktif'); setCurrentPage(1); }}
               className={`px-6 py-3 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 ${
                 statusFilter === 'non-aktif' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
               <UserX size={14} />
-              Karyawan Non-Aktif <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] ${statusFilter === 'non-aktif' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-400'}`}>{inactiveAccounts.length}</span>
+              Karyawan Non-Aktif {statusFilter === 'non-aktif' && <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] bg-red-500 text-white`}>{totalCount}</span>}
             </button>
           </div>
 
@@ -609,7 +624,7 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
             <div className="bg-white border border-gray-100 rounded-md p-8 flex justify-center">
               <div className="w-8 h-8 border-4 border-[#006E62] border-t-transparent rounded-full animate-spin"></div>
             </div>
-          ) : filteredAccounts.length === 0 ? (
+          ) : accounts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
               <Users size={48} strokeWidth={1} className="mb-4" />
               <p className="text-lg">Data akun {statusFilter === 'aktif' ? 'aktif' : 'non-aktif'} tidak ditemukan.</p>
@@ -623,7 +638,7 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
                       <input 
                         type="checkbox" 
                         className="rounded border-gray-300 text-[#006E62] focus:ring-[#006E62]"
-                        checked={selectedIds.length === filteredAccounts.length && filteredAccounts.length > 0}
+                        checked={selectedIds.length === accounts.length && accounts.length > 0}
                         onChange={toggleSelectAll}
                       />
                     </th>
@@ -635,7 +650,7 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredAccounts.map(account => {
+                  {accounts.map(account => {
                     const isInactive = account.end_date && account.end_date <= today;
                     const isSelected = selectedIds.includes(account.id);
                     return (
@@ -674,15 +689,13 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
                             {isInactive ? 'NON-AKTIF' : account.employee_type}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDelete(account.id); }}
-                            className="p-1.5 text-red-400 hover:text-red-600 transition-colors"
-                            title="Hapus Akun"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDelete(account.id); }}
+                          className="p-1.5 text-[#ef4444] hover:bg-red-50 rounded transition-colors"
+                          title="Hapus Akun"
+                        >
+                          <Trash2 size={14} className="text-[#ef4444]" />
+                        </button>
                       </tr>
                     );
                   })}
@@ -690,6 +703,18 @@ const AccountMain: React.FC<AccountMainProps> = ({ user, setUser, isSelfProfile 
               </table>
             </div>
           )}
+
+          <div className="mt-6 flex justify-between items-center bg-white p-4 rounded-md border border-gray-100 shadow-sm">
+            <div className="text-xs text-gray-500 font-medium">
+              Menampilkan <span className="text-[#006E62]">{accounts.length}</span> dari <span className="text-[#006E62]">{totalCount}</span> data akun
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalCount={totalCount}
+              pageSize={PAGE_SIZE}
+              onPageChange={(page) => setCurrentPage(page)}
+            />
+          </div>
         </div>
       ) : activeSubTab === 'career' ? (
         <div className="animate-in fade-in duration-300">
