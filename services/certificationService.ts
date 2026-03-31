@@ -30,7 +30,12 @@ export const certificationService = {
       .not('account.access_code', 'ilike', '%SPADMIN%');
 
     if (searchQuery) {
-      query = query.or(`cert_name.ilike.%${searchQuery}%,cert_type.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+      const accountIds = await accountService.searchIds(searchQuery);
+      if (accountIds.length > 0) {
+        query = query.or(`cert_name.ilike.%${searchQuery}%,cert_type.ilike.%${searchQuery}%,account_id.in.(${accountIds.join(',')})`);
+      } else {
+        query = query.or(`cert_name.ilike.%${searchQuery}%,cert_type.ilike.%${searchQuery}%`);
+      }
     }
 
     if (filterType === 'this_month') {

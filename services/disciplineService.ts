@@ -29,7 +29,12 @@ export const disciplineService = {
       .not('account.access_code', 'ilike', '%SPADMIN%');
 
     if (searchQuery) {
-      query = query.or(`warning_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+      const accountIds = await accountService.searchIds(searchQuery);
+      if (accountIds.length > 0) {
+        query = query.or(`warning_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%,account_id.in.(${accountIds.join(',')})`);
+      } else {
+        query = query.or(`warning_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%`);
+      }
     }
 
     const { data, error, count } = await query
@@ -124,7 +129,12 @@ export const disciplineService = {
       .not('account.access_code', 'ilike', '%SPADMIN%');
 
     if (searchQuery) {
-      query = query.or(`termination_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+      const accountIds = await accountService.searchIds(searchQuery);
+      if (accountIds.length > 0) {
+        query = query.or(`termination_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%,account_id.in.(${accountIds.join(',')})`);
+      } else {
+        query = query.or(`termination_type.ilike.%${searchQuery}%,reason.ilike.%${searchQuery}%`);
+      }
     }
 
     const { data, error, count } = await query

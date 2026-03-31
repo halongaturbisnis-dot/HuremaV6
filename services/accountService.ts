@@ -80,6 +80,20 @@ export const accountService = {
     return data as Account[];
   },
 
+  async searchIds(query: string): Promise<string[]> {
+    if (!query) return [];
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('id')
+      .or(`full_name.ilike.%${query}%,internal_nik.ilike.%${query}%`);
+    
+    if (error) {
+      console.error("SEARCH_IDS_ERROR:", error.message);
+      return [];
+    }
+    return data.map(a => a.id);
+  },
+
   async getById(id: string) {
     const { data, error } = await supabase
       .from('accounts')

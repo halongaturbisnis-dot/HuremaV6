@@ -21,7 +21,12 @@ export const careerService = {
       .not('account.access_code', 'ilike', '%SPADMIN%');
 
     if (searchQuery) {
-      query = query.or(`position.ilike.%${searchQuery}%,grade.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+      const accountIds = await accountService.searchIds(searchQuery);
+      if (accountIds.length > 0) {
+        query = query.or(`position.ilike.%${searchQuery}%,grade.ilike.%${searchQuery}%,account_id.in.(${accountIds.join(',')})`);
+      } else {
+        query = query.or(`position.ilike.%${searchQuery}%,grade.ilike.%${searchQuery}%`);
+      }
     }
 
     const { data, error, count } = await query

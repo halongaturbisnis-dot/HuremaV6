@@ -30,7 +30,12 @@ export const contractService = {
       .not('account.access_code', 'ilike', '%SPADMIN%');
 
     if (searchQuery) {
-      query = query.or(`contract_number.ilike.%${searchQuery}%,account.full_name.ilike.%${searchQuery}%`);
+      const accountIds = await accountService.searchIds(searchQuery);
+      if (accountIds.length > 0) {
+        query = query.or(`contract_number.ilike.%${searchQuery}%,account_id.in.(${accountIds.join(',')})`);
+      } else {
+        query = query.ilike('contract_number', `%${searchQuery}%`);
+      }
     }
 
     const today = new Date().toISOString().split('T')[0];
